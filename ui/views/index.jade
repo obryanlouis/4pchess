@@ -1,0 +1,15 @@
+extends layout
+
+block content
+  div.wrapper
+    div.lhs
+      div#board
+      div#move_overlay.move-overlay
+    div.rhs
+      div.evaluation
+        div#eval_estimate.eval-estimate
+      div.move-controls
+        div#undo_move.move-button.chevron-left
+        div#redo_move.move-button.chevron-right
+      div#move_history
+
