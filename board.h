@@ -3,13 +3,13 @@
 
 // Classes for a 4-player teams chess board (chess.com variant).
 
-
-#include <utility>
 #include <functional>
+#include <memory>
 #include <optional>
-#include <unordered_map>
-#include <vector>
 #include <ostream>
+#include <unordered_map>
+#include <utility>
+#include <vector>
 
 namespace chess {
 
@@ -112,6 +112,8 @@ class BoardLocation {
   }
   friend std::ostream& operator<<(
       std::ostream& os, const BoardLocation& location);
+
+  std::string PrettyStr() const;
 
  private:
   int row_;
@@ -273,6 +275,7 @@ class Move {
   int ManhattanDistance() const;
   friend std::ostream& operator<<(
       std::ostream& os, const Move& move);
+  std::string PrettyStr() const;
 
  private:
   BoardLocation from_;
@@ -337,6 +340,8 @@ class Board {
       std::optional<std::unordered_map<Player, CastlingRights>>
         castling_rights = std::nullopt);
 
+  Board(Board&) = default;
+
   // Returns (IN_PROGRESS, [move_list]) if the game is in progress.
   // Returns (GameResult, []) if the game is over.
 //  std::pair<GameResult, std::vector<Move>> GetLegalMoves();
@@ -380,7 +385,7 @@ class Board {
 
   int64_t HashKey() const { return hash_key_; }
 
-  static Board CreateStandardSetup();
+  static std::shared_ptr<Board> CreateStandardSetup();
 //  bool operator==(const Board& other) const;
 //  bool operator!=(const Board& other) const;
   const CastlingRights& GetCastlingRights(const Player& player) const;

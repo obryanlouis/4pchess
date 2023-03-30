@@ -14,6 +14,10 @@
 
 namespace chess {
 
+constexpr int kMaxQuiescenceDepth = 4;
+constexpr int kMaxQuiescenceMoves = 2;
+
+
 AlphaBetaPlayer::AlphaBetaPlayer(std::optional<PlayerOptions> options) {
   if (options.has_value()) {
     options_ = options.value();
@@ -33,14 +37,118 @@ AlphaBetaPlayer::AlphaBetaPlayer(std::optional<PlayerOptions> options) {
   piece_move_order_scores_[KING] = 0.0;
 
   if (options_.enable_transposition_table) {
-    size_t n_bytes = kTranspositionTableSize * sizeof(HashTableEntry);
-    hash_table_ = (HashTableEntry*) malloc(n_bytes);
+    hash_table_ = (HashTableEntry*) calloc(
+        options_.transposition_table_size, sizeof(HashTableEntry));
     assert(
         (hash_table_ != nullptr) && 
         "Can't create transposition table. Try using a smaller size.");
-    std::memset(hash_table_, 0, n_bytes);
   }
 
+}
+
+
+// https://www.chessprogramming.org/Quiescence_Search
+std::optional<float> AlphaBetaPlayer::QuiescenceSearch(
+    Board& board,
+    int depth_left,
+    float alpha,
+    float beta,
+    bool maximizing_player,
+    const std::optional<
+        std::chrono::time_point<std::chrono::system_clock>>& deadline) {
+  if (canceled_.load() || (deadline.has_value()
+        && std::chrono::system_clock::now() >= deadline.value())) {
+    return std::nullopt;
+  }
+
+  float stand_pat = Evaluate(board);
+
+  if (!maximizing_player) {
+    // Evaluate returns the board value w.r.t. RY team
+    stand_pat = -stand_pat;
+  }
+
+  if (depth_left <= 0) {
+    return stand_pat;
+  }
+
+  if (stand_pat >= beta) {
+    return beta;
+  }
+  alpha = std::max(alpha, stand_pat);
+
+  std::vector<Move> pseudo_legal_moves = MoveOrder(board, maximizing_player);
+
+  Player turn = board.GetTurn();
+  int turn_i = static_cast<int>(turn.GetColor());
+  float curr_mob_score = player_mobility_scores_[turn_i];
+
+  int num_moves_examined = 0;
+  bool has_legal_move = false;
+
+  for (int i = pseudo_legal_moves.size() - 1;
+      i >= 0 && num_moves_examined < kMaxQuiescenceMoves; i--) {
+    const auto& move = pseudo_legal_moves[i];
+    board.MakeMove(move);
+
+    if (board.CheckWasLastMoveKingCapture() != IN_PROGRESS) {
+      board.UndoMove();
+      has_legal_move = true;
+      alpha = std::numeric_limits<float>::infinity();
+      break;
+    }
+
+    if (options_.enable_mobility_evaluation) {
+      float player_mobility_score = board.MobilityEvaluation(turn);
+      player_mobility_scores_[turn_i] = player_mobility_score;
+    }
+
+    if (board.IsKingInCheck(turn)) { // Illegal move
+      board.UndoMove();
+
+      continue;
+    }
+
+    has_legal_move = true;
+
+    if (move.GetStandardCapture() != nullptr) {
+      // quiet move -- skip
+      board.UndoMove();
+      continue;
+    }
+
+    auto value_or = QuiescenceSearch(
+        board, depth_left - 1, -beta, -alpha, !maximizing_player,
+        deadline);
+
+    board.UndoMove();
+
+    num_moves_examined++;
+
+    if (!value_or.has_value()) {
+      return std::nullopt; // timeout
+    }
+
+    alpha = std::max(alpha, -value_or.value());
+    if (alpha >= beta) {
+      break; // cutoff
+    }
+  }
+
+  if (options_.enable_mobility_evaluation) {
+    player_mobility_scores_[turn_i] = curr_mob_score; // reset
+  }
+
+  if (!has_legal_move) {
+    // no legal moves
+    if (!board.IsKingInCheck(turn)) {
+      alpha = 0; // stalemate
+    }
+
+    return -std::numeric_limits<float>::infinity(); // checkmate
+  }
+
+  return alpha;
 }
 
 
@@ -65,22 +173,51 @@ std::optional<std::pair<float, std::optional<Move>>> AlphaBetaPlayer::NegaMax(
     return std::nullopt;
   }
 
-  if (options_.enable_transposition_table) {
+  if (options_.enable_transposition_table) { // return hash table value if any
     int64_t hash = board.HashKey();
-    size_t n = hash % kTranspositionTableSize;
+    size_t n = hash % options_.transposition_table_size;
     const HashTableEntry& entry = hash_table_[n];
-    if (entry.key == hash // valid entry
-        && entry.depth >= depth_left) {
+    if (entry.key == hash) { // valid entry
       num_cache_hits_++;
-      return std::make_pair(entry.score, entry.best_move);
+      if (entry.depth >= depth_left) {
+        if (entry.bound == EXACT) {
+          return std::make_pair(entry.score, entry.best_move);
+        }
+        if (maximizing_player) {
+          if (entry.bound == LOWER_BOUND) {
+            if (entry.score >= beta) {
+              return std::make_pair(entry.score, entry.best_move);
+            }
+          } else {
+            beta = std::min(beta, entry.score);
+          }
+        } else {
+          if (entry.bound == UPPER_BOUND) {
+            if (entry.score <= alpha) {
+              return std::make_pair(entry.score, entry.best_move);
+            }
+          } else {
+            alpha = std::max(alpha, entry.score);
+          }
+        }
+      }
     }
   }
 
   if (depth_left <= 0) {
 
+    if (options_.enable_quiescence) {
+      auto value_or = QuiescenceSearch(
+          board, kMaxQuiescenceDepth, alpha, beta, maximizing_player, deadline);
+      if (!value_or.has_value()) {
+        return std::nullopt; // timeout
+      }
+      return std::make_pair(value_or.value(), std::nullopt);
+    }
+
     float eval = Evaluate(board);
     if (!maximizing_player) {
-      // Evaluate returns the board value w.r.t. the maximizing player
+      // Evaluate returns the board value w.r.t. RY team
       eval = -eval;
     }
 
@@ -98,30 +235,19 @@ std::optional<std::pair<float, std::optional<Move>>> AlphaBetaPlayer::NegaMax(
   std::vector<Move> pseudo_legal_moves = MoveOrder(board, maximizing_player);
 
   std::optional<Move> pv_move = pvinfo.GetBestMove();
-  bool had_pv_move = false;
   if (options_.enable_principal_variation && pv_move.has_value()) {
     pseudo_legal_moves.push_back(pv_move.value());
-    had_pv_move = true;
   }
-
-  Player player = board.GetTurn();
 
   float value = -std::numeric_limits<float>::infinity();
   std::optional<Move> best_move;
-  const Player& turn = board.GetTurn();
+  Player turn = board.GetTurn();
   int turn_i = static_cast<int>(turn.GetColor());
   float curr_mob_score = player_mobility_scores_[turn_i];
+  bool cutoff = false;
   for (int i = pseudo_legal_moves.size() - 1; i >= 0; i--) {
     const auto& move = pseudo_legal_moves[i];
 
-//    if (options_.enable_principal_variation_skip
-//        && had_pv_move
-//        && i < pseudo_legal_moves.size() - 1
-//        && move == pseudo_legal_moves.back()) {
-//      continue;
-//    }
-
-    const auto* piece = board.GetPiece(move.From());
     board.MakeMove(move);
 
     if (board.CheckWasLastMoveKingCapture() != IN_PROGRESS) {
@@ -137,7 +263,7 @@ std::optional<std::pair<float, std::optional<Move>>> AlphaBetaPlayer::NegaMax(
       player_mobility_scores_[turn_i] = player_mobility_score;
     }
 
-    if (board.IsKingInCheck(player)) {
+    if (board.IsKingInCheck(turn)) {
       board.UndoMove();
       if (options_.enable_mobility_evaluation) {
         player_mobility_scores_[turn_i] = curr_mob_score;
@@ -187,7 +313,7 @@ std::optional<std::pair<float, std::optional<Move>>> AlphaBetaPlayer::NegaMax(
     }
 
     if (!value_and_move.has_value()) {
-      return std::nullopt;
+      return std::nullopt; // timeout
     }
     float val = -std::get<0>(value_and_move.value());
     if (val > value || !best_move.has_value()) {
@@ -201,10 +327,26 @@ std::optional<std::pair<float, std::optional<Move>>> AlphaBetaPlayer::NegaMax(
       }
     }
     if (value > beta) {
+      cutoff = true;
       break; // cutoff
     }
     if (value > alpha) {
       alpha = value;
+    }
+  }
+
+  if (options_.enable_transposition_table) {
+    int64_t hash = board.HashKey();
+    size_t n = hash % options_.transposition_table_size;
+    HashTableEntry& entry = hash_table_[n];
+    entry.key = hash;
+    entry.depth = depth;
+    entry.best_move = best_move;
+    entry.score = maximizing_player ? value : -value;
+    if (cutoff) {
+      entry.bound = maximizing_player ? LOWER_BOUND : UPPER_BOUND;
+    } else {
+      entry.bound = EXACT;
     }
   }
 
@@ -214,27 +356,7 @@ std::optional<std::pair<float, std::optional<Move>>> AlphaBetaPlayer::NegaMax(
       value = 0;
     }
 
-    if (options_.enable_transposition_table) {
-      int64_t hash = board.HashKey();
-      size_t n = hash % kTranspositionTableSize;
-      HashTableEntry& entry = hash_table_[n];
-      entry.key = hash;
-      entry.depth = depth_left;
-      entry.best_move = std::nullopt;
-      entry.score = value;
-    }
-
     return std::make_pair(value, std::nullopt);
-  }
-
-  if (options_.enable_transposition_table) {
-    int64_t hash = board.HashKey();
-    size_t n = hash % kTranspositionTableSize;
-    HashTableEntry& entry = hash_table_[n];
-    entry.key = hash;
-    entry.depth = depth_left;
-    entry.best_move = best_move;
-    entry.score = value;
   }
 
   return std::make_pair(value, best_move);
@@ -275,7 +397,6 @@ std::optional<std::tuple<float, std::optional<Move>, int>> AlphaBetaPlayer::Make
 
   std::optional<std::chrono::time_point<std::chrono::system_clock>> deadline;
   auto start = std::chrono::system_clock::now();
-  int start_num_evaluations = num_evaluations_;
   if (time_limit.has_value()) {
     deadline = start + time_limit.value();
   }
@@ -312,14 +433,6 @@ std::optional<std::tuple<float, std::optional<Move>, int>> AlphaBetaPlayer::Make
     }
   }
 
-  auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
-      std::chrono::system_clock::now() - start);
-  float secs = static_cast<float>(duration.count()) / 1000.0;
-  float evaluations = num_evaluations_ - start_num_evaluations;
-  int nodes_per_sec = (int)(evaluations / secs);
-//  std::cout << "Nodes/sec: " << nodes_per_sec << std::endl;
-//  std::cout << "Searched depth: " << searched_depth << std::endl;
-
   if (res.has_value()) {
     float eval = std::get<0>(res.value());
     if (!maximizing_player) {
@@ -329,7 +442,6 @@ std::optional<std::tuple<float, std::optional<Move>, int>> AlphaBetaPlayer::Make
   }
 
   return std::nullopt;
-  //return res;
 }
 
 std::vector<Move> AlphaBetaPlayer::MoveOrder(
@@ -367,7 +479,7 @@ std::vector<Move> AlphaBetaPlayer::MoveOrder(
   // reorder the moves
   std::vector<std::pair<size_t, float>> pos_and_score;
   pos_and_score.reserve(moves.size());
-  float max_pl_mult = maximizing_player ? 1 : -1;
+//  float max_pl_mult = maximizing_player ? 1 : -1;
   for (size_t i = 0; i < moves.size(); i++) {
     const auto& move = moves[i];
     float score = 0;

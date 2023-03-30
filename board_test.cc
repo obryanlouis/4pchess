@@ -1414,13 +1414,13 @@ TEST(HelperFunctionsTest, OtherTeam) {
 //}
 
 TEST(BoardTest, KeyTest) {
-  Board board = Board::CreateStandardSetup();
+  auto board = Board::CreateStandardSetup();
   Move move(BoardLocation(12, 7), BoardLocation(11, 7));
-  int64_t h0 = board.HashKey();
-  board.MakeMove(move);
-  int64_t h1 = board.HashKey();
-  board.UndoMove();
-  int64_t h2 = board.HashKey();
+  int64_t h0 = board->HashKey();
+  board->MakeMove(move);
+  int64_t h1 = board->HashKey();
+  board->UndoMove();
+  int64_t h2 = board->HashKey();
 
   EXPECT_EQ(h0, h2);
   EXPECT_NE(h0, h1);

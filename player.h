@@ -29,17 +29,21 @@ class PVInfo {
   std::shared_ptr<PVInfo> child_ = nullptr;
 };
 
+constexpr size_t kTranspositionTableSize = 100'000'000;
+
 struct PlayerOptions {
   bool enable_principal_variation = true;
-  bool enable_principal_variation_skip = false;
   bool enable_static_exchange = false;
   bool enable_mobility_evaluation = true;
   bool enable_move_order = true;
   bool enable_late_move_reduction = false;
   bool enable_transposition_table = false;
+  bool enable_quiescence = false;
 
   // generic test change
   bool test = false;
+
+  size_t transposition_table_size = kTranspositionTableSize;
 };
 
 enum ScoreBound {
@@ -51,10 +55,8 @@ struct HashTableEntry {
   int depth;
   std::optional<Move> best_move;
   float score;
-//  ScoreBound bound;
+  ScoreBound bound;
 };
-
-constexpr size_t kTranspositionTableSize = 100000000;
 
 class AlphaBetaPlayer {
  public:
@@ -66,7 +68,10 @@ class AlphaBetaPlayer {
   float Evaluate(Board& board);
   std::vector<Move> MoveOrder(Board& board, bool maximizing_player);
   void CancelEvaluation() { canceled_ = true; }
-  const PVInfo& GetPVInfo() { return pv_info_; }
+  // NOTE: Should wait until evaluation is done before resetting this to true.
+  void SetCanceled(bool canceled) { canceled_ = canceled; }
+  bool IsCanceled() { return canceled_.load(); }
+  const PVInfo& GetPVInfo() const { return pv_info_; }
 
   std::optional<std::pair<float, std::optional<Move>>> NegaMax(
       Board& board,
@@ -78,6 +83,15 @@ class AlphaBetaPlayer {
       const std::optional<std::chrono::time_point<std::chrono::system_clock>>& deadline,
       PVInfo& pv_info);
 
+  std::optional<float> QuiescenceSearch(
+      Board& board,
+      int depth_left,
+      float alpha,
+      float beta,
+      bool maximizing_player,
+      const std::optional<
+          std::chrono::time_point<std::chrono::system_clock>>& deadline);
+
   int GetNumEvaluations() { return num_evaluations_; }
   int GetNumCacheHits() { return num_cache_hits_; }
 
@@ -86,6 +100,8 @@ class AlphaBetaPlayer {
       delete[] hash_table_;
     }
   }
+
+  void EnableDebug(bool enable) { enable_debug_ = enable; }
 
  private:
 
@@ -107,8 +123,9 @@ class AlphaBetaPlayer {
   float piece_move_order_scores_[6];
   PlayerOptions options_;
   float player_mobility_scores_[4];
-  //HashTableEntry hash_table_[kTranspositionTableSize];
   HashTableEntry* hash_table_ = nullptr;
+  // TODO: use this if needed
+  std::atomic<bool> enable_debug_ = false;
 };
 
 }  // namespace chess

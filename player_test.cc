@@ -104,13 +104,13 @@ TEST(PlayerTest, EvaluatePieceImbalance) {
 TEST(PlayerTest, EvaluateCheckmateForcedCheckmate1) {
   AlphaBetaPlayer player;
 
-  Board board = Board::CreateStandardSetup();
-  board.MakeMove(Move(BoardLocation(12, 7), BoardLocation(11, 7)));
-  board.MakeMove(Move(BoardLocation(3, 1), BoardLocation(3, 2)));
-  board.MakeMove(Move(BoardLocation(1, 8), BoardLocation(2, 8)));
-  board.MakeMove(Move(BoardLocation(3, 12), BoardLocation(3, 11)));
+  auto board = Board::CreateStandardSetup();
+  board->MakeMove(Move(BoardLocation(12, 7), BoardLocation(11, 7)));
+  board->MakeMove(Move(BoardLocation(3, 1), BoardLocation(3, 2)));
+  board->MakeMove(Move(BoardLocation(1, 8), BoardLocation(2, 8)));
+  board->MakeMove(Move(BoardLocation(3, 12), BoardLocation(3, 11)));
 
-  const auto& res = player.MakeMove(board);
+  const auto& res = player.MakeMove(*board);
   ASSERT_TRUE(res.has_value());
   float valuation = std::get<0>(res.value());
   EXPECT_EQ(valuation, std::numeric_limits<float>::infinity());
@@ -122,14 +122,14 @@ TEST(PlayerTest, EvaluateCheckmateForcedCheckmate1) {
 TEST(PlayerTest, CheckPVInfoProducesValidMoves) {
   AlphaBetaPlayer player;
 
-  Board board = Board::CreateStandardSetup();
-  board.MakeMove(Move(BoardLocation(12, 7), BoardLocation(11, 7)));
-  board.MakeMove(Move(BoardLocation(7, 1), BoardLocation(7, 2)));
-  board.MakeMove(Move(BoardLocation(1, 6), BoardLocation(2, 6)));
-  board.MakeMove(Move(BoardLocation(6, 12), BoardLocation(6, 11)));
+  auto board = Board::CreateStandardSetup();
+  board->MakeMove(Move(BoardLocation(12, 7), BoardLocation(11, 7)));
+  board->MakeMove(Move(BoardLocation(7, 1), BoardLocation(7, 2)));
+  board->MakeMove(Move(BoardLocation(1, 6), BoardLocation(2, 6)));
+  board->MakeMove(Move(BoardLocation(6, 12), BoardLocation(6, 11)));
 
   constexpr int kDepth = 4;
-  const auto& res = player.MakeMove(board, std::nullopt, kDepth);
+  const auto& res = player.MakeMove(*board, std::nullopt, kDepth);
   ASSERT_TRUE(res.has_value());
   const auto& move_or = std::get<1>(res.value());
   ASSERT_TRUE(move_or.has_value());
@@ -140,10 +140,10 @@ TEST(PlayerTest, CheckPVInfoProducesValidMoves) {
     if (pvmove_or.has_value()) {
       num_pvmoves++;
       const auto& move = pvmove_or.value();
-      const auto& moves = board.GetPseudoLegalMoves();
+      const auto& moves = board->GetPseudoLegalMoves();
       auto it = std::find(moves.begin(), moves.end(), move);
       ASSERT_NE(it, moves.end());
-      board.MakeMove(move);
+      board->MakeMove(move);
     }
     pvinfo = pvinfo->GetChild().get();
   }

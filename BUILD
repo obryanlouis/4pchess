@@ -54,3 +54,31 @@ cc_binary(
     ],
 )
 
+cc_binary(
+    name = "cli",
+    srcs = ["cli.cc"],
+    deps = [
+        ":command_line",
+    ],
+)
+
+cc_library(
+    name = "utils",
+    srcs = ["utils.cc"],
+    hdrs = ["utils.h"],
+    deps = [
+        ":board",
+    ],
+)
+
+cc_library(
+    name = "command_line",
+    srcs = ["command_line.cc"],
+    hdrs = ["command_line.h"],
+    deps = [
+        ":board",
+        ":player",
+        ":utils",
+    ],
+)
+

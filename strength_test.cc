@@ -13,15 +13,15 @@ namespace chess {
 constexpr int kNumGames = 100;
 constexpr int kMaxMoves = 1000;
 constexpr int kNumThreads = 10;
-constexpr int kMoveTimeLimitMs = 150;
+constexpr int kMoveTimeLimitMs = 350;
 
 class StrengthTest {
  public:
   StrengthTest() {
     move_time_limit_ = std::chrono::milliseconds(kMoveTimeLimitMs);
 
-    player1_options_.enable_transposition_table = false;
-    player2_options_.enable_transposition_table = true;
+    player1_options_.enable_quiescence = false;
+    player2_options_.enable_quiescence = true;
   }
 
   void Run() {
@@ -51,7 +51,7 @@ class StrengthTest {
 
       float player2_score = 0;
 
-      Board board = Board::CreateStandardSetup();
+      auto board = Board::CreateStandardSetup();
       bool player2_moves_first = game_id % 2 == 1;
       bool end_early = false;
       for (int move_id = 0; move_id < kMaxMoves; move_id++) {
@@ -59,9 +59,9 @@ class StrengthTest {
           ? &player1_options_ : &player2_options_;
         AlphaBetaPlayer player(*player_options);
 
-        auto res = player.MakeMove(board, move_time_limit_);
+        auto res = player.MakeMove(*board, move_time_limit_);
 
-        GameResult game_result = board.GetGameResult();
+        GameResult game_result = board->GetGameResult();
         if (game_result != IN_PROGRESS) {
           if (game_result == STALEMATE) {
             player2_score += 0.5;
@@ -82,10 +82,10 @@ class StrengthTest {
           break;
         }
         auto move = std::get<1>(res.value()).value();
-        board.MakeMove(move);
+        board->MakeMove(move);
       }
       if (!end_early) {
-        int piece_eval = board.PieceEvaluation();
+        int piece_eval = board->PieceEvaluation();
         if (piece_eval == 0) {
           player2_score += 0.5;
         } else {

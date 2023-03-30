@@ -913,154 +913,6 @@ GameResult Board::CheckWasLastMoveKingCapture() const {
   return IN_PROGRESS;
 }
 
-//std::pair<GameResult, std::vector<Move>> Board::GetLegalMoves(
-//    bool check_legal) {
-//  // First, check if the game is over
-//
-//  // King captured last move
-//  if (!moves_.empty()) {
-//    const auto& last_move = moves_.back();
-//    const auto* capture = last_move.GetStandardCapture();
-//    if (capture != nullptr && capture->GetPieceType() == KING) {
-//      return std::make_pair(
-//          capture->GetTeam() == RED_YELLOW ? WIN_BG : WIN_RY,
-//          std::vector<Move>());
-//    }
-//  }
-//
-//  // Get the pieces of the current player
-//  // For each piece, find the legal moves
-//
-//  // Special rules:
-//  // 1) If a player is in check, they can only either capture an opposing
-//  //    team's king or perform a move that gets them out of check.
-//  // 2) If a player can not get out of check other than capturing an opposing
-//  //    king, then their team loses. Moves that would place the king in check
-//  //    are not allowed.
-//
-//  //std::vector<Move> moves;
-//  move_buffer_.clear();
-//
-//  std::optional<BoardLocation> king_location = GetKingLocation(turn_);
-//  for (const auto& placed_piece : piece_list_[turn_.GetColor()]) {
-//    const auto& location = placed_piece.GetLocation();
-//    const auto* piece = placed_piece.GetPiece();
-//    switch (piece->GetPieceType()) {
-//      case PAWN:
-//        GetPawnMoves(move_buffer_, location, *piece);
-//        break;
-//      case KNIGHT:
-//        GetKnightMoves(move_buffer_, location, *piece);
-//        break;
-//      case BISHOP:
-//        GetBishopMoves(move_buffer_, location, *piece);
-//        break;
-//      case ROOK:
-//        GetRookMoves(move_buffer_, location, *piece);
-//        break;
-//      case QUEEN:
-//        GetQueenMoves(move_buffer_, location, *piece);
-//        break;
-//      case KING:
-//        GetKingMoves(move_buffer_, location, *piece);
-//        king_location = location;
-//        break;
-//      default:
-//       assert(false);
-//    }
-//  }
-//
-//  // NOTE: We could speed this up by not copying the moves to a second vector
-//  std::vector<Move> legal_moves;
-//  legal_moves.reserve(move_buffer_.size());
-//  Team other_team = OtherTeam(TeamToPlay());
-//
-////  std::vector<PlacedPiece> king_attackers;
-////  if (king_location.has_value()) {
-////    king_attackers = GetAttackers(other_team, king_location.value());
-////  }
-//
-//  for (const auto& move : move_buffer_) {
-//    // King captures are explicitly allowed
-//    const auto* capture = move.GetStandardCapture();
-//    bool king_captured = false;
-//    if (capture != nullptr && capture->GetPieceType() == KING) {
-//      king_captured = true;
-//    } else {
-//      const auto* en_passant_capture = move.GetEnpassantCapture();
-//      if (en_passant_capture != nullptr
-//          && en_passant_capture->GetPieceType() == KING) {
-//        king_captured = true;
-//      }
-//    }
-//    if (king_captured) {
-//      legal_moves.push_back(std::move(move));
-//      continue;
-//    }
-//
-////    // verify that the move doesn't leave the king in check
-////    if (king_attackers.size() == 2
-////        || (king_location.has_value()
-////            && king_location.value() == move.From())) {
-////      if (!IsAttackedByTeam(other_team, move.To())) {
-////        legal_moves.push_back(move);
-////      }
-////    } else if (king_attackers.size() == 1) {
-////      const PlacedPiece& attacker = king_attackers[0];
-////      if ((move.To() == attacker.GetLocation()
-////            || IsOnPathBetween(king_location.value(), attacker.GetLocation(),
-////                               move.To()))
-////          && !DiscoversCheck(king_location.value(), move.From(), move.To(), other_team)) {
-////        legal_moves.push_back(move);
-////      }
-////    } else {
-////      if (!DiscoversCheck(king_location.value(), move.From(), move.To(), other_team)) {
-////        legal_moves.push_back(move);
-////      }
-////    }
-//
-//    if (!check_legal) {
-//      legal_moves.push_back(move);
-//    } else {
-//      const auto* piece = GetPiece(move.From());
-//      Player t = turn_;
-//      board.MakeMove(move);
-//      bool legal;
-//      if (piece->GetPieceType() == KING) {
-//        std::optional<BoardLocation> loc = GetKingLocation(t);
-//        legal = !IsAttackedByTeam(other_team, *loc);
-//      } else {
-//        legal = !IsAttackedByTeam(other_team, *king_location);
-//      }
-//      board.UndoMove();
-//      if (legal) {
-//        legal_moves.push_back(move);
-//      }
-//    }
-//
-//  }
-//
-//  // If in check, this team loses. Otherwise it's a stalemate.
-//  if (legal_moves.empty()) {
-//    const auto king_location = GetKingLocation(turn_);
-//    if (!king_location.has_value()) { // debug
-//      std::cout << "turn: " << turn_ << std::endl;
-//      for (const auto& move : moves_) {
-//        std::cout << "move: " << move << std::endl;
-//      }
-//    }
-//    assert(king_location.has_value());
-//    GameResult game_result = STALEMATE;
-//    if (IsAttackedByTeam(other_team, *king_location)) {
-//      // Checkmate
-//      game_result = TeamToPlay() == RED_YELLOW ? WIN_BG : WIN_RY;
-//    }
-//    return std::make_pair(game_result, std::move(legal_moves));
-//  }
-//
-//  return std::make_pair(IN_PROGRESS, std::move(legal_moves));
-//}
-
 void Board::SetPiece(
     const BoardLocation& location,
     const Piece& piece) {
@@ -1429,7 +1281,7 @@ inline Player GetPreviousPlayer(const Player& player) {
   }
 }
 
-Board Board::CreateStandardSetup() {
+std::shared_ptr<Board> Board::CreateStandardSetup() {
   std::unordered_map<BoardLocation, Piece> location_to_piece;
   std::unordered_map<Player, CastlingRights> castling_rights;
 
@@ -1483,8 +1335,8 @@ Board Board::CreateStandardSetup() {
     }
   }
 
-  return Board(Player(RED), std::move(location_to_piece),
-      std::move(castling_rights));
+  return std::make_shared<Board>(
+      Player(RED), std::move(location_to_piece), std::move(castling_rights));
 }
 
 int Move::ManhattanDistance() const {
@@ -1644,6 +1496,17 @@ std::optional<CastlingType> Board::GetRookLocationType(
 
 Team OtherTeam(Team team) {
   return team == RED_YELLOW ? BLUE_GREEN : RED_YELLOW;
+}
+
+std::string BoardLocation::PrettyStr() const {
+  std::string s;
+  s += ('a' + col_);
+  s += std::to_string(14 - row_);
+  return s;
+}
+
+std::string Move::PrettyStr() const {
+  return from_.PrettyStr() + to_.PrettyStr();
 }
 
 }  // namespace chess
