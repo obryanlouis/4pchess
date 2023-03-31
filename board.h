@@ -364,6 +364,7 @@ class Board {
       Team team, const BoardLocation& location,
       bool return_early = false) const;
   std::optional<BoardLocation> GetKingLocation(const Player& turn) const;
+  bool DeliversCheck(const Move& move);
 
   const Piece* GetPiece(
       int row, int col) const {
@@ -447,6 +448,9 @@ class Board {
   inline void SetPiece(const BoardLocation& location,
                 const Piece& piece);
   inline void RemovePiece(const BoardLocation& location);
+  inline bool QueenAttacks(
+      const BoardLocation& queen_loc,
+      const BoardLocation& other_loc) const;
   inline bool RookAttacks(
       const BoardLocation& rook_loc,
       const BoardLocation& other_loc) const;

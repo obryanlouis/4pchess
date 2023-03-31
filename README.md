@@ -25,7 +25,8 @@ npm install
 2. Start the server:
 
 ```
-./start.sh
+node-gyp install
+node app.js
 ```
 
 3. Go to http://localhost:3000

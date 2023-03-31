@@ -1,3 +1,4 @@
+#include <tuple>
 #include <algorithm>
 #include <cmath>
 #include <utility>
@@ -16,6 +17,70 @@ namespace chess {
 
 constexpr int kMaxQuiescenceDepth = 4;
 constexpr int kMaxQuiescenceMoves = 2;
+
+namespace {
+
+std::vector<Move> PrunedMoveOrder(
+    Board& board, bool maximizing_player, bool prune) {
+
+  auto moves = board.GetPseudoLegalMoves();
+
+  std::vector<size_t> checks;
+  std::vector<size_t> captures;
+  std::vector<std::tuple<size_t, float>> noncapture_pos_and_score;
+  Player player = board.GetTurn();
+  float max_pl_mult = maximizing_player ? 1 : -1;
+  for (size_t i = 0; i < moves.size(); i++) {
+    const auto& move = moves[i];
+
+    if (board.DeliversCheck(move)) {
+      checks.push_back(i);
+    } else if (move.GetStandardCapture() != nullptr
+               || move.GetEnpassantCapture() != nullptr) {
+      captures.push_back(i);
+    } else {
+      board.MakeMove(move);
+      float score = max_pl_mult * board.MobilityEvaluation(player);
+      board.UndoMove();
+      noncapture_pos_and_score.push_back(std::make_tuple(i, score));
+    }
+  }
+
+  std::vector<Move> pruned_moves;
+
+  struct {
+    bool operator()(std::pair<size_t, float> a, std::pair<size_t, float> b) {
+      return std::get<1>(a) < std::get<1>(b);
+    }
+  } customLess;
+
+  std::sort(noncapture_pos_and_score.begin(), noncapture_pos_and_score.end(),
+            customLess);
+
+  int i = 0;
+  constexpr int kNumNoncaptures = 4;
+  if (prune) {
+    i = std::max((int)noncapture_pos_and_score.size() - kNumNoncaptures, 0);
+  }
+
+  for (; i < noncapture_pos_and_score.size() - 1; i++) {
+    const auto& entry = noncapture_pos_and_score[i];
+    size_t pos = std::get<0>(entry);
+    pruned_moves.push_back(moves[pos]);
+  }
+
+  for (const auto& pos : captures) {
+    pruned_moves.push_back(moves[pos]);
+  }
+
+  for (const auto& pos : checks) {
+    pruned_moves.push_back(moves[pos]);
+  }
+
+  return pruned_moves;
+}
+
+}  // namespace
 
 
 AlphaBetaPlayer::AlphaBetaPlayer(std::optional<PlayerOptions> options) {
@@ -232,7 +297,16 @@ std::optional<std::pair<float, std::optional<Move>>> AlphaBetaPlayer::NegaMax(
 
     return std::make_pair(eval, std::nullopt);
   }
-  std::vector<Move> pseudo_legal_moves = MoveOrder(board, maximizing_player);
+
+  std::vector<Move> pseudo_legal_moves;
+
+  pseudo_legal_moves = PrunedMoveOrder(board, maximizing_player, true);
+//  if (options_.test) {
+//    pseudo_legal_moves = PrunedMoveOrder(board, maximizing_player, depth >= 2);
+//  } else {
+//    pseudo_legal_moves = MoveOrder(board, maximizing_player);
+//  }
+
 
   std::optional<Move> pv_move = pvinfo.GetBestMove();
   if (options_.enable_principal_variation && pv_move.has_value()) {

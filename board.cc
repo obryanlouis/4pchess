@@ -57,33 +57,41 @@ const Piece kGreenQueen(kGreenPlayer, QUEEN);
 const Piece kGreenKing(kGreenPlayer, KING);
 
 const Piece* kPieceSet[4][6] = {
+  {
   &kRedPawn,
   &kRedKnight,
   &kRedBishop,
   &kRedRook,
   &kRedQueen,
   &kRedKing,
+  },
 
+  {
   &kBluePawn,
   &kBlueKnight,
   &kBlueBishop,
   &kBlueRook,
   &kBlueQueen,
   &kBlueKing,
+  },
 
+  {
   &kYellowPawn,
   &kYellowKnight,
   &kYellowBishop,
   &kYellowRook,
   &kYellowQueen,
   &kYellowKing,
+  },
 
+  {
   &kGreenPawn,
   &kGreenKnight,
   &kGreenBishop,
   &kGreenRook,
   &kGreenQueen,
   &kGreenKing,
+  },
 };
 
 
@@ -560,6 +568,13 @@ bool Board::BishopAttacks(
     return !piece_between;
   }
   return false;
+}
+
+bool Board::QueenAttacks(
+    const BoardLocation& queen_loc,
+    const BoardLocation& other_loc) const {
+  return RookAttacks(queen_loc, other_loc)
+         || BishopAttacks(queen_loc, other_loc);
 }
 
 bool Board::KingAttacks(
@@ -1217,7 +1232,7 @@ Board::Board(
   struct {
     bool operator()(const PlacedPiece& a, const PlacedPiece& b) {
       // this doesn't need to be fast.
-      int piece_move_order_scores[6];
+      float piece_move_order_scores[6];
       piece_move_order_scores[PAWN] = 0.1;
       piece_move_order_scores[KNIGHT] = 0.2;
       piece_move_order_scores[BISHOP] = 0.3;
@@ -1225,8 +1240,8 @@ Board::Board(
       piece_move_order_scores[QUEEN] = 0.5;
       piece_move_order_scores[KING] = 0.0;
 
-      int order_a = piece_move_order_scores[a.GetPiece()->GetPieceType()];
-      int order_b = piece_move_order_scores[b.GetPiece()->GetPieceType()];
+      float order_a = piece_move_order_scores[a.GetPiece()->GetPieceType()];
+      float order_b = piece_move_order_scores[b.GetPiece()->GetPieceType()];
       return order_a < order_b;
     }
   } customLess;
@@ -1507,6 +1522,53 @@ std::string BoardLocation::PrettyStr() const {
 
 std::string Move::PrettyStr() const {
   return from_.PrettyStr() + to_.PrettyStr();
+}
+
+bool Board::DeliversCheck(const Move& move) {
+  const Player& player = GetTurn();
+
+  MakeMove(move);
+
+  const Piece* piece = GetPiece(move.To());
+  if (piece == nullptr) {
+  }
+  assert(piece != nullptr);
+  bool checks = false;
+
+  int other_color = static_cast<int>(player.GetColor() + 1) % 4;
+  for (int add = 0; add < 4; add += 2) {
+    int other = (other_color + add) % 4;
+    auto king_loc = GetKingLocation(Player(static_cast<PlayerColor>(other)));
+    if (king_loc.has_value()) {
+      switch (piece->GetPieceType()) {
+      case PAWN:
+        checks = checks || PawnAttacks(move.To(), piece->GetColor(),
+            king_loc.value());
+        break;
+      case KNIGHT:
+        checks = checks || KnightAttacks(move.To(), king_loc.value());
+        break;
+      case BISHOP:
+        checks = checks || BishopAttacks(move.To(), king_loc.value());
+        break;
+      case ROOK:
+        checks = checks || RookAttacks(move.To(), king_loc.value());
+        break;
+      case QUEEN:
+        checks = checks || QueenAttacks(move.To(), king_loc.value());
+        break;
+      default:
+        break;
+      }
+      if (checks) {
+        break;
+      }
+    }
+  }
+
+  UndoMove();
+
+  return checks;
 }
 
 }  // namespace chess
