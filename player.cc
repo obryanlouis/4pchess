@@ -49,7 +49,7 @@ std::vector<Move> PrunedMoveOrder(
   std::vector<Move> pruned_moves;
 
   struct {
-    bool operator()(std::pair<size_t, float> a, std::pair<size_t, float> b) {
+    bool operator()(std::tuple<size_t, float> a, std::tuple<size_t, float> b) {
       return std::get<1>(a) < std::get<1>(b);
     }
   } customLess;
@@ -57,10 +57,11 @@ std::vector<Move> PrunedMoveOrder(
   std::sort(noncapture_pos_and_score.begin(), noncapture_pos_and_score.end(),
             customLess);
 
-  int i = 0;
+  size_t i = 0;
   constexpr int kNumNoncaptures = 4;
   if (prune) {
-    i = std::max((int)noncapture_pos_and_score.size() - kNumNoncaptures, 0);
+    i = static_cast<size_t>(
+        std::max((int)noncapture_pos_and_score.size() - kNumNoncaptures, 0));
   }
 
   for (; i < noncapture_pos_and_score.size() - 1; i++) {
@@ -300,12 +301,11 @@ std::optional<std::pair<float, std::optional<Move>>> AlphaBetaPlayer::NegaMax(
 
   std::vector<Move> pseudo_legal_moves;
 
-  pseudo_legal_moves = PrunedMoveOrder(board, maximizing_player, true);
-//  if (options_.test) {
-//    pseudo_legal_moves = PrunedMoveOrder(board, maximizing_player, depth >= 2);
-//  } else {
-//    pseudo_legal_moves = MoveOrder(board, maximizing_player);
-//  }
+  if (options_.test) {
+    pseudo_legal_moves = PrunedMoveOrder(board, maximizing_player, depth >= 2);
+  } else {
+    pseudo_legal_moves = MoveOrder(board, maximizing_player);
+  }
 
 
   std::optional<Move> pv_move = pvinfo.GetBestMove();
