@@ -36,14 +36,19 @@ struct PlayerOptions {
   bool enable_static_exchange = false;
   bool enable_mobility_evaluation = true;
   bool enable_move_order = true;
-  bool enable_late_move_reduction = false;
+  bool enable_move_order_checks = true;
+  bool enable_late_move_reduction = true;
   bool enable_transposition_table = false;
   bool enable_quiescence = false;
+  // https://www.chessprogramming.org/Aspiration_Windows
+  bool enable_aspiration_window = false;
+  bool enable_history_heuristic = true;
 
   // generic test change
   bool test = false;
 
   size_t transposition_table_size = kTranspositionTableSize;
+  std::optional<int> max_search_depth;
 };
 
 enum ScoreBound {
@@ -80,6 +85,7 @@ class AlphaBetaPlayer {
       float alpha,
       float beta,
       bool maximizing_player,
+      int expanded,
       const std::optional<std::chrono::time_point<std::chrono::system_clock>>& deadline,
       PVInfo& pv_info);
 
@@ -114,6 +120,9 @@ class AlphaBetaPlayer {
       size_t pos,
       const std::vector<int>& other_team_sorted_piece_values,
       size_t other_team_pos) const;
+  std::vector<Move> PrunedMoveOrder(
+      Board& board, bool maximizing_player, bool prune);
+  void ResetHistoryHeuristic();
 
   int num_evaluations_ = 0; // debugging
   int num_cache_hits_ = 0;
@@ -126,6 +135,11 @@ class AlphaBetaPlayer {
   HashTableEntry* hash_table_ = nullptr;
   // TODO: use this if needed
   std::atomic<bool> enable_debug_ = false;
+
+  // https://www.chessprogramming.org/History_Heuristic
+  // (from_row, from_col, to_row, to_col)
+  float history_heuristic_[14][14][14][14];
+  //float history_heuristic_[14][14];
 };
 
 }  // namespace chess

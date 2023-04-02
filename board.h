@@ -24,7 +24,7 @@ enum PlayerColor {
 };
 
 enum Team {
-  RED_YELLOW = 1, BLUE_GREEN = 2,
+  RED_YELLOW = 0, BLUE_GREEN = 1,
 };
 
 class Player {
@@ -258,6 +258,10 @@ class Move {
     return castling_rights_;
   }
 
+  bool IsCapture() const {
+    return standard_capture_ != nullptr || en_passant_capture_ != nullptr;
+  }
+
   bool operator==(const Move& other) const {
     return from_ == other.from_
         && to_ == other.to_
@@ -348,6 +352,7 @@ class Board {
 
   std::vector<Move> GetPseudoLegalMoves();
   bool IsKingInCheck(const Player& player) const;
+  bool IsKingInCheck(Team team) const;
 
   GameResult CheckWasLastMoveKingCapture() const;
   GameResult GetGameResult(); // Avoid calling during search.

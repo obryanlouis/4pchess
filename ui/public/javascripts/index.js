@@ -10,7 +10,14 @@ var move_index = null;
 var board_key_to_eval = {};
 const player_id_to_color = {0: 'red', 1: 'blue', 2: 'yellow', 3: 'green'};
 var request_interval = null;
+var max_search_depth = null;
 
+if (window.localStorage != null) {
+  var max_depth = parseInt(window.localStorage['max_search_depth']);
+  if (max_depth != null && !isNaN(max_depth)) {
+    max_search_depth = max_depth;
+  }
+}
 
 function createBoard() {
   var rows = []
@@ -63,6 +70,18 @@ $(document).ready(function() {
   resetBoard();
   displayBoard();
   request_interval = setInterval(requestBoardEvaluation, 50);
+  if (max_search_depth != null) {
+    $('#max_depth').val(max_search_depth);
+  }
+  $('#max_depth').change(function() {
+    var max_depth = parseInt($(this).val());
+    if (max_depth == null || isNaN(max_depth)) {
+      max_search_depth = null;
+    } else {
+      max_search_depth = max_depth;
+    }
+    window.localStorage['max_search_depth'] = max_search_depth;
+  });
 })
 
 function resetBoard() {
@@ -390,6 +409,23 @@ function displayBoard() {
     }
     var move_html = row_elements.join('\n');
     $('#move_history').html(move_html);
+
+    var debug_parts = [];
+    for (var move_id = 0; move_id < moves.length && move_id < move_index + 1; move_id++) {
+      var move, piece_type;
+      [move, piece_type] = moves.at(move_id);
+      var from = move.getFrom();
+      var from_row = from.getRow();
+      var from_col = from.getCol();
+      var to = move.getTo();
+      var to_row = to.getRow();
+      var to_col = to.getCol();
+      var debug_text = `Move(BoardLocation(${from_row}, ${from_col}), BoardLocation(${to_row}, ${to_col}))`;
+      debug_parts.push(`<p>${debug_text}</p>`);
+    }
+    var debug_html = debug_parts.join('\n');
+
+    $('#move_history').append(debug_html);
   }
 
   var board_key = getBoardKey();
@@ -610,13 +646,10 @@ function requestBoardEvaluation() {
       signal: signal,
     }
 
-//    next_depth += 1;
+    if (max_search_depth != null && search_depth > max_search_depth) {
+      return;
+    }
 
-//    if (search_depth > 6) { // DEBUG
-//      return;
-//    }
-
-    //request_in_flight = true;
     requests_in_flight[req_key] = search_depth;
     last_board_key = req_key;
     fetch('/chess-api', options)

@@ -901,6 +901,7 @@ GameResult Board::GetGameResult() {
 bool Board::IsKingInCheck(const Player& player) const {
   // note: this can be faster by updating the king location in Make[Undo]Move
   const auto king_location = GetKingLocation(player);
+
 //  if (!king_location.has_value()) { // debug
 //    std::cout << "turn: " << turn_ << std::endl;
 //    for (const auto& move : moves_) {
@@ -914,6 +915,13 @@ bool Board::IsKingInCheck(const Player& player) const {
   }
 
   return IsAttackedByTeam(OtherTeam(player.GetTeam()), *king_location);
+}
+
+bool Board::IsKingInCheck(Team team) const {
+  if (team == RED_YELLOW) {
+    return IsKingInCheck(Player(RED)) || IsKingInCheck(Player(YELLOW));
+  }
+  return IsKingInCheck(Player(BLUE)) || IsKingInCheck(Player(GREEN));
 }
 
 GameResult Board::CheckWasLastMoveKingCapture() const {

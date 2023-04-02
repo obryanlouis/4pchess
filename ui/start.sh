@@ -1,1 +1,1 @@
-node-gyp build && npm start
+node-gyp build && node app.js

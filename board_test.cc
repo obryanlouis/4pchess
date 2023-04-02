@@ -1426,6 +1426,26 @@ TEST(BoardTest, KeyTest) {
   EXPECT_NE(h0, h1);
 }
 
+TEST(BoardTest, IsKingInCheck) {
+  auto board = Board::CreateStandardSetup();
+  board->MakeMove(Move(BoardLocation(12, 7), BoardLocation(11, 7))); // h3
+  board->MakeMove(Move(BoardLocation(7, 1), BoardLocation(7, 2))); // c7
+  board->MakeMove(Move(BoardLocation(1, 6), BoardLocation(2, 6))); // g12
+  board->MakeMove(Move(BoardLocation(6, 12), BoardLocation(6, 11))); // l8
+  board->MakeMove(Move(BoardLocation(13, 6), BoardLocation(7, 12))); // Qxm7
+
+  EXPECT_TRUE(board->IsKingInCheck(Player(GREEN)));
+
+  board->UndoMove();
+
+  board->MakeMove(Move(BoardLocation(13, 6), BoardLocation(10, 9))); // Qj4
+  board->MakeMove(Move(BoardLocation(6, 0), BoardLocation(9, 3))); // Qd5
+  board->MakeMove(Move(BoardLocation(7, 0), BoardLocation(6, 1))); // Qxb8
+  EXPECT_TRUE(board->IsKingInCheck(Player(BLUE)));
+  board->MakeMove(Move(BoardLocation(7, 13), BoardLocation(1, 7))); // Qxh13
+  EXPECT_TRUE(board->IsKingInCheck(Player(YELLOW)));
+}
+
 }  // namespace chess
 
 

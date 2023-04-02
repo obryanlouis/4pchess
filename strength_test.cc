@@ -11,17 +11,21 @@
 namespace chess {
 
 constexpr int kNumGames = 100;
-constexpr int kMaxMoves = 1000;
+constexpr int kMaxMoves = 100;
 constexpr int kNumThreads = 10;
-constexpr int kMoveTimeLimitMs = 350;
+constexpr int kMoveTimeLimitMs = 1000;
 
 class StrengthTest {
  public:
   StrengthTest() {
-    move_time_limit_ = std::chrono::milliseconds(kMoveTimeLimitMs);
+    if (kMoveTimeLimitMs <= 0) {
+      move_time_limit_ = std::nullopt;
+    } else {
+      move_time_limit_ = std::chrono::milliseconds(kMoveTimeLimitMs);
+    }
 
-    player1_options_.test = false;
-    player2_options_.test = true;
+    player1_options_.enable_move_order_checks = false;
+    player2_options_.enable_move_order_checks = true;
   }
 
   void Run() {
@@ -120,7 +124,7 @@ class StrengthTest {
   float player2_score_ = 0;
   int next_game_id_ = 0;
   int num_completed_games_ = 0;
-  std::chrono::milliseconds move_time_limit_;
+  std::optional<std::chrono::milliseconds> move_time_limit_;
   PlayerOptions player1_options_;
   PlayerOptions player2_options_;
 };

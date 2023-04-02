@@ -150,6 +150,42 @@ TEST(PlayerTest, CheckPVInfoProducesValidMoves) {
   EXPECT_EQ(num_pvmoves, kDepth);
 }
 
+TEST(PlayerTest, Quiescence) {
+  PlayerOptions options;
+  options.enable_mobility_evaluation = false;
+  options.enable_quiescence = true;
+  AlphaBetaPlayer player(options);
+
+  auto board = Board::CreateStandardSetup();
+
+  board->MakeMove(Move(BoardLocation(12, 7), BoardLocation(11, 7)));
+  board->MakeMove(Move(BoardLocation(7, 1), BoardLocation(7, 2)));
+  board->MakeMove(Move(BoardLocation(1, 6), BoardLocation(2, 6)));
+  board->MakeMove(Move(BoardLocation(6, 12), BoardLocation(6, 11)));
+//  board->MakeMove(Move(BoardLocation(13, 6), BoardLocation(10, 9)));
+//  board->MakeMove(Move(BoardLocation(6, 0), BoardLocation(9, 3)));
+
+//  board->MakeMove(Move(BoardLocation(0, 7), BoardLocation(3, 4)));
+//  board->MakeMove(Move(BoardLocation(7, 13), BoardLocation(4, 10)));
+//  board->MakeMove(Move(BoardLocation(13, 8), BoardLocation(9, 4)));
+//  board->MakeMove(Move(BoardLocation(9, 3), BoardLocation(7, 5)));
+//  board->MakeMove(Move(BoardLocation(3, 4), BoardLocation(5, 6)));
+//  board->MakeMove(Move(BoardLocation(4, 10), BoardLocation(1, 7)));
+
+  // Best depth-2 move
+  const auto res_or = player.MakeMove(*board, std::nullopt, 1);
+  ASSERT_TRUE(res_or.has_value());
+  const auto& res = res_or.value();
+  float score = std::get<0>(res);
+  auto move_or = std::get<1>(res);
+  ASSERT_TRUE(move_or.has_value());
+
+  std::cout
+    << "score: " << score
+    << " move: " << move_or.value()
+    << std::endl;
+}
+
 }  // namespace chess
 
 

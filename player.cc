@@ -15,18 +15,16 @@
 
 namespace chess {
 
-constexpr int kMaxQuiescenceDepth = 4;
+constexpr int kMaxQuiescenceDepth = 8;
 constexpr int kMaxQuiescenceMoves = 2;
 
-namespace {
-
-std::vector<Move> PrunedMoveOrder(
+std::vector<Move> AlphaBetaPlayer::PrunedMoveOrder(
     Board& board, bool maximizing_player, bool prune) {
 
   auto moves = board.GetPseudoLegalMoves();
 
   std::vector<size_t> checks;
-  std::vector<size_t> captures;
+  std::vector<std::tuple<size_t, float>> capture_pos_and_score;
   std::vector<std::tuple<size_t, float>> noncapture_pos_and_score;
   Player player = board.GetTurn();
   float max_pl_mult = maximizing_player ? 1 : -1;
@@ -37,7 +35,15 @@ std::vector<Move> PrunedMoveOrder(
       checks.push_back(i);
     } else if (move.GetStandardCapture() != nullptr
                || move.GetEnpassantCapture() != nullptr) {
-      captures.push_back(i);
+      const auto* capture = move.GetStandardCapture();
+      if (capture == nullptr) {
+        capture = move.GetEnpassantCapture();
+      }
+      const auto* piece_moved = board.GetPiece(move.From());
+      assert(piece_moved != nullptr);
+      float score = (float)piece_evaluations_[static_cast<int>(capture->GetPieceType())];
+      score -= piece_evaluations_[static_cast<int>(piece_moved->GetPieceType())];
+      capture_pos_and_score.push_back(std::make_tuple(i, score));
     } else {
       board.MakeMove(move);
       float score = max_pl_mult * board.MobilityEvaluation(player);
@@ -54,6 +60,8 @@ std::vector<Move> PrunedMoveOrder(
     }
   } customLess;
 
+  std::sort(capture_pos_and_score.begin(), capture_pos_and_score.end(),
+            customLess);
   std::sort(noncapture_pos_and_score.begin(), noncapture_pos_and_score.end(),
             customLess);
 
@@ -70,8 +78,8 @@ std::vector<Move> PrunedMoveOrder(
     pruned_moves.push_back(moves[pos]);
   }
 
-  for (const auto& pos : captures) {
-    pruned_moves.push_back(moves[pos]);
+  for (const auto& entry : capture_pos_and_score) {
+    pruned_moves.push_back(moves[std::get<0>(entry)]);
   }
 
   for (const auto& pos : checks) {
@@ -80,8 +88,6 @@ std::vector<Move> PrunedMoveOrder(
 
   return pruned_moves;
 }
-
-}  // namespace
 
 
 AlphaBetaPlayer::AlphaBetaPlayer(std::optional<PlayerOptions> options) {
@@ -110,6 +116,9 @@ AlphaBetaPlayer::AlphaBetaPlayer(std::optional<PlayerOptions> options) {
         "Can't create transposition table. Try using a smaller size.");
   }
 
+  if (options_.enable_history_heuristic) {
+    ResetHistoryHeuristic();
+  }
 }
 
 
@@ -124,24 +133,42 @@ std::optional<float> AlphaBetaPlayer::QuiescenceSearch(
         std::chrono::time_point<std::chrono::system_clock>>& deadline) {
   if (canceled_.load() || (deadline.has_value()
         && std::chrono::system_clock::now() >= deadline.value())) {
+    // hit deadline
     return std::nullopt;
   }
 
-  float stand_pat = Evaluate(board);
+  std::string debug_prefix(kMaxQuiescenceDepth - depth_left, ' ');
 
+//  std::cout
+//    << debug_prefix
+//    << "QSearch"
+//    << " last move: " << board.GetLastMove()
+//    << " player: " << static_cast<int>(board.GetTurn().GetColor())
+//    << " depth_left: " << depth_left
+//    << " alpha: " << alpha
+//    << " beta: " << beta
+//    << " maximizing_player: " << maximizing_player
+//    << std::endl;
+
+  float eval = Evaluate(board);
   if (!maximizing_player) {
     // Evaluate returns the board value w.r.t. RY team
-    stand_pat = -stand_pat;
+    eval = -eval;
   }
 
   if (depth_left <= 0) {
-    return stand_pat;
+//    std::cout << debug_prefix << "QSearch res: " << eval << std::endl;
+    return eval;
   }
 
-  if (stand_pat >= beta) {
+  if (eval >= beta) {
+//    std::cout << debug_prefix << "QSearch res: " << beta << std::endl;
     return beta;
   }
-  alpha = std::max(alpha, stand_pat);
+
+  if (alpha < eval) {
+    alpha = eval;
+  }
 
   std::vector<Move> pseudo_legal_moves = MoveOrder(board, maximizing_player);
 
@@ -151,6 +178,7 @@ std::optional<float> AlphaBetaPlayer::QuiescenceSearch(
 
   int num_moves_examined = 0;
   bool has_legal_move = false;
+  bool checked = board.IsKingInCheck(turn);
 
   for (int i = pseudo_legal_moves.size() - 1;
       i >= 0 && num_moves_examined < kMaxQuiescenceMoves; i--) {
@@ -159,14 +187,13 @@ std::optional<float> AlphaBetaPlayer::QuiescenceSearch(
 
     if (board.CheckWasLastMoveKingCapture() != IN_PROGRESS) {
       board.UndoMove();
-      has_legal_move = true;
-      alpha = std::numeric_limits<float>::infinity();
-      break;
-    }
+      if (options_.enable_mobility_evaluation) {
+        player_mobility_scores_[turn_i] = curr_mob_score; // reset
+      }
 
-    if (options_.enable_mobility_evaluation) {
-      float player_mobility_score = board.MobilityEvaluation(turn);
-      player_mobility_scores_[turn_i] = player_mobility_score;
+//      return beta;
+//    std::cout << debug_prefix << "QSearch res: " << "inf" << std::endl;
+      return std::numeric_limits<float>::infinity();
     }
 
     if (board.IsKingInCheck(turn)) { // Illegal move
@@ -177,10 +204,15 @@ std::optional<float> AlphaBetaPlayer::QuiescenceSearch(
 
     has_legal_move = true;
 
-    if (move.GetStandardCapture() != nullptr) {
+    if (!checked && !move.IsCapture()) {
       // quiet move -- skip
       board.UndoMove();
       continue;
+    }
+
+    if (options_.enable_mobility_evaluation) {
+      float player_mobility_score = board.MobilityEvaluation(turn);
+      player_mobility_scores_[turn_i] = player_mobility_score;
     }
 
     auto value_or = QuiescenceSearch(
@@ -195,9 +227,13 @@ std::optional<float> AlphaBetaPlayer::QuiescenceSearch(
       return std::nullopt; // timeout
     }
 
-    alpha = std::max(alpha, -value_or.value());
-    if (alpha >= beta) {
-      break; // cutoff
+    float score = -value_or.value();
+    if (score >= beta) {
+//    std::cout << debug_prefix << "QSearch res: " << beta << std::endl;
+      return beta;  // cutoff
+    }
+    if (score > alpha) {
+      alpha = score;
     }
   }
 
@@ -207,13 +243,17 @@ std::optional<float> AlphaBetaPlayer::QuiescenceSearch(
 
   if (!has_legal_move) {
     // no legal moves
-    if (!board.IsKingInCheck(turn)) {
-      alpha = 0; // stalemate
+    if (!checked) {
+//    std::cout << debug_prefix << "QSearch res: " << 0 << std::endl;
+      return 0;  // stalemate
     }
 
-    return -std::numeric_limits<float>::infinity(); // checkmate
+//    return alpha;
+//    std::cout << debug_prefix << "QSearch res: " << "-inf" << std::endl;
+    return -std::numeric_limits<float>::infinity();  // checkmate
   }
 
+//    std::cout << debug_prefix << "QSearch res: " << alpha << std::endl;
   return alpha;
 }
 
@@ -231,6 +271,7 @@ std::optional<std::pair<float, std::optional<Move>>> AlphaBetaPlayer::NegaMax(
     float alpha,
     float beta,
     bool maximizing_player,
+    int expanded,
     const std::optional<
         std::chrono::time_point<std::chrono::system_clock>>& deadline,
     PVInfo& pvinfo) {
@@ -271,14 +312,24 @@ std::optional<std::pair<float, std::optional<Move>>> AlphaBetaPlayer::NegaMax(
   }
 
   if (depth_left <= 0) {
+    if (options_.enable_quiescence
+        && expanded < 5
+        && (board.LastMoveWasCapture()
+            || board.IsKingInCheck(board.GetTurn().GetTeam())
+            || board.IsKingInCheck(OtherTeam(board.GetTurn().GetTeam())))
+        ) {
 
-    if (options_.enable_quiescence) {
-      auto value_or = QuiescenceSearch(
-          board, kMaxQuiescenceDepth, alpha, beta, maximizing_player, deadline);
-      if (!value_or.has_value()) {
-        return std::nullopt; // timeout
-      }
-      return std::make_pair(value_or.value(), std::nullopt);
+//      auto value_or = QuiescenceSearch(
+//          board, kMaxQuiescenceDepth, alpha, beta, maximizing_player, deadline);
+//      if (!value_or.has_value()) {
+//        return std::nullopt; // timeout
+//      }
+//      return std::make_pair(value_or.value(), std::nullopt);
+
+      return NegaMax(
+          board, depth, 1, alpha, beta, maximizing_player, expanded + 1, deadline,
+          pvinfo);
+
     }
 
     float eval = Evaluate(board);
@@ -300,13 +351,7 @@ std::optional<std::pair<float, std::optional<Move>>> AlphaBetaPlayer::NegaMax(
   }
 
   std::vector<Move> pseudo_legal_moves;
-
-  if (options_.test) {
-    pseudo_legal_moves = PrunedMoveOrder(board, maximizing_player, depth >= 2);
-  } else {
-    pseudo_legal_moves = MoveOrder(board, maximizing_player);
-  }
-
+  pseudo_legal_moves = MoveOrder(board, maximizing_player);
 
   std::optional<Move> pv_move = pvinfo.GetBestMove();
   if (options_.enable_principal_variation && pv_move.has_value()) {
@@ -357,10 +402,11 @@ std::optional<std::pair<float, std::optional<Move>>> AlphaBetaPlayer::NegaMax(
 
     int new_depth_left = depth_left - 1;
     bool lmr = options_.enable_late_move_reduction
-//            && depth >= 4
+            && depth >= 3
             && !is_pv_move
-            && move.GetStandardCapture() == nullptr
-            && move.GetEnpassantCapture() == nullptr
+            && !move.IsCapture()
+            && !board.IsKingInCheck(turn.GetTeam())
+            && !board.IsKingInCheck(OtherTeam(turn.GetTeam()))
             // note: also add checks here, when we can compute them cheaply
     ;
     if (lmr) {
@@ -369,9 +415,7 @@ std::optional<std::pair<float, std::optional<Move>>> AlphaBetaPlayer::NegaMax(
 
     auto value_and_move = NegaMax(
         board, depth + 1, new_depth_left, -beta, -alpha, !maximizing_player,
-        deadline, *child_pvinfo);
-
-    board.UndoMove();
+        expanded, deadline, *child_pvinfo);
 
     if (lmr
         && value_and_move.has_value()
@@ -379,8 +423,10 @@ std::optional<std::pair<float, std::optional<Move>>> AlphaBetaPlayer::NegaMax(
       // Did not fail low -- redo search
       value_and_move = NegaMax(
           board, depth + 1, depth_left - 1, -beta, -alpha, !maximizing_player,
-          deadline, *child_pvinfo);
+          expanded, deadline, *child_pvinfo);
     }
+
+    board.UndoMove();
 
     if (options_.enable_mobility_evaluation) {
       player_mobility_scores_[turn_i] = curr_mob_score;
@@ -402,6 +448,14 @@ std::optional<std::pair<float, std::optional<Move>>> AlphaBetaPlayer::NegaMax(
     }
     if (value > beta) {
       cutoff = true;
+      if (options_.enable_history_heuristic) {
+        if (!move.IsCapture()) {
+          const auto& from = move.From();
+          const auto& to = move.To();
+          history_heuristic_[from.GetRow()][from.GetCol()][to.GetRow()][to.GetCol()]
+            += depth * depth;
+        }
+      }
       break; // cutoff
     }
     if (value > alpha) {
@@ -436,7 +490,6 @@ std::optional<std::pair<float, std::optional<Move>>> AlphaBetaPlayer::NegaMax(
   return std::make_pair(value, best_move);
 }
 
-
 float AlphaBetaPlayer::Evaluate(Board& board) {
   num_evaluations_++;
 
@@ -454,13 +507,21 @@ float AlphaBetaPlayer::Evaluate(Board& board) {
   }
 
   float score = board.PieceEvaluation();
+//  if (options_.enable_mobility_evaluation) {
+//    score += board.MobilityEvaluation();
+//  }
+
   if (options_.enable_mobility_evaluation) {
     for (int i = 0; i < 4; i++) {
       score += player_mobility_scores_[i];
     }
-    //score += board.MobilityEvaluation();
   }
+
   return score;
+}
+
+void AlphaBetaPlayer::ResetHistoryHeuristic() {
+  std::memset(history_heuristic_, 0, (14*14*14*14) * sizeof(float) / sizeof(char));
 }
 
 std::optional<std::tuple<float, std::optional<Move>, int>> AlphaBetaPlayer::MakeMove(
@@ -469,12 +530,21 @@ std::optional<std::tuple<float, std::optional<Move>, int>> AlphaBetaPlayer::Make
     int max_depth) {
   // Use Alpha-Beta search with iterative deepening
 
+  if (options_.max_search_depth.has_value()) {
+    max_depth = std::min(max_depth, options_.max_search_depth.value());
+  }
+
+  if (options_.enable_history_heuristic) {
+    ResetHistoryHeuristic();
+  }
+
   std::optional<std::chrono::time_point<std::chrono::system_clock>> deadline;
   auto start = std::chrono::system_clock::now();
   if (time_limit.has_value()) {
     deadline = start + time_limit.value();
   }
 
+  // reset pseudo-mobility scores
   if (options_.enable_mobility_evaluation) {
     for (int i = 0; i < 4; i++) {
       Player player(static_cast<PlayerColor>(i));
@@ -490,10 +560,52 @@ std::optional<std::tuple<float, std::optional<Move>, int>> AlphaBetaPlayer::Make
   bool maximizing_player = board.TeamToPlay() == RED_YELLOW;
   int searched_depth = 0;
 
+  bool init_aspiration_bound = false;
+  float aspiration_bound_low = -inf;
+  float aspiration_bound_high = inf;
+
   while (next_depth <= max_depth) {
-    auto move_and_value = NegaMax(
-        board, 1, next_depth, alpha, beta, maximizing_player,
-        deadline, pv_info_);
+    std::optional<std::pair<float, std::optional<Move>>> move_and_value;
+
+    if (res.has_value() && options_.enable_aspiration_window) {
+      float last_score = std::get<0>(res.value());
+      // initialize aspiration bounds
+      if (!init_aspiration_bound) {
+        aspiration_bound_low = last_score - 2.0;
+        aspiration_bound_high = last_score + 2.0;
+        init_aspiration_bound = true;
+      }
+
+      while (true) {
+        move_and_value = NegaMax(
+            board, 1, next_depth, aspiration_bound_low, aspiration_bound_high,
+            0, maximizing_player, deadline, pv_info_);
+
+        if (move_and_value.has_value()) {
+          float score = std::get<0>(move_and_value.value());
+          if (score <= aspiration_bound_low || score >= aspiration_bound_high) {
+            aspiration_bound_low = std::min(aspiration_bound_low, score - 0.25f);
+            aspiration_bound_high = std::max(aspiration_bound_high, score + 0.25f);
+            if (enable_debug_.load()) {
+//              std::cout << "Redo aspiration search at depth " << next_depth
+//                << " with new bounds ("
+//                << aspiration_bound_low << ", "
+//                << aspiration_bound_high << ")"
+//                << std::endl;
+            }
+          } else {
+            break; // aspiration window worked
+          }
+        } else {
+          break;  // hit deadline
+        }
+      }
+
+    } else {
+      move_and_value = NegaMax(
+          board, 1, next_depth, alpha, beta, maximizing_player, 0,
+          deadline, pv_info_);
+    }
 
     if (!move_and_value.has_value()) { // Hit deadline
       break;
@@ -558,7 +670,14 @@ std::vector<Move> AlphaBetaPlayer::MoveOrder(
     const auto& move = moves[i];
     float score = 0;
 
+    if (options_.enable_move_order_checks) {
+      if (board.DeliversCheck(move)) {
+        score += 10.0;
+      }
+    }
+
     const auto* capture = move.GetStandardCapture();
+
     if (capture != nullptr) {
 //      score += max_pl_mult * StaticExchangeEvaluation(board, move);
       score += piece_evaluations_[static_cast<int>(capture->GetPieceType())];
@@ -569,6 +688,12 @@ std::vector<Move> AlphaBetaPlayer::MoveOrder(
 
     const auto* piece = board.GetPiece(move.From());
     score += piece_move_order_scores_[static_cast<int>(piece->GetPieceType())];
+
+    if (options_.enable_history_heuristic && !move.IsCapture()) {
+      const auto& from = move.From();
+      const auto& to = move.To();
+      score += history_heuristic_[from.GetRow()][from.GetCol()][to.GetRow()][to.GetCol()] / 10.0;
+    }
 
 //    const auto& promotion_piece_type = move.GetPromotionPieceType();
 //    if (promotion_piece_type.has_value()) {
@@ -596,7 +721,6 @@ std::vector<Move> AlphaBetaPlayer::MoveOrder(
   }
 
   return reordered_moves;
-
 }
 
 int AlphaBetaPlayer::StaticExchangeEvaluation(

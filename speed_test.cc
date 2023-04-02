@@ -14,10 +14,11 @@ TEST(Speed, BoardTest) {
   auto start = std::chrono::system_clock::now();
   auto board = Board::CreateStandardSetup();
   PlayerOptions options;
-  options.test = false;
+  options.enable_late_move_reduction = true;
   AlphaBetaPlayer player(options);
+  player.EnableDebug(true);
 
-  std::chrono::milliseconds time_limit(10000);
+  std::chrono::milliseconds time_limit(1000);
   auto res = player.MakeMove(*board, time_limit);
 //  auto res = player.MakeMove(*board, std::nullopt, 4);
 
