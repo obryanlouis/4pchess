@@ -11,9 +11,9 @@
 namespace chess {
 
 constexpr int kNumGames = 100;
-constexpr int kMaxMoves = 100;
+constexpr int kMaxMovesPerGame = 100;
 constexpr int kNumThreads = 10;
-constexpr int kMoveTimeLimitMs = 1000;
+constexpr int kMoveTimeLimitMs = 5000;
 
 class StrengthTest {
  public:
@@ -24,8 +24,8 @@ class StrengthTest {
       move_time_limit_ = std::chrono::milliseconds(kMoveTimeLimitMs);
     }
 
-    player1_options_.enable_move_order_checks = false;
-    player2_options_.enable_move_order_checks = true;
+    player1_options_.enable_late_move_reduction = false;
+    player2_options_.enable_late_move_reduction = true;
   }
 
   void Run() {
@@ -58,12 +58,24 @@ class StrengthTest {
       auto board = Board::CreateStandardSetup();
       bool player2_moves_first = game_id % 2 == 1;
       bool end_early = false;
-      for (int move_id = 0; move_id < kMaxMoves; move_id++) {
-        auto* player_options = ((game_id + move_id) % 2 == 0)
+      for (int move_id = 0; move_id < kMaxMovesPerGame; move_id++) {
+        bool player1_moves = ((game_id + move_id) % 2 == 0);
+        auto* player_options = player1_moves
           ? &player1_options_ : &player2_options_;
         AlphaBetaPlayer player(*player_options);
 
         auto res = player.MakeMove(*board, move_time_limit_);
+
+        if (res.has_value()) {
+          int search_depth = std::get<2>(res.value());
+          if (player1_moves) {
+            player1_num_searches_++;
+            player1_total_search_depth_ += search_depth;
+          } else {
+            player2_num_searches_++;
+            player2_total_search_depth_ += search_depth;
+          }
+        }
 
         GameResult game_result = board->GetGameResult();
         if (game_result != IN_PROGRESS) {
@@ -77,7 +89,11 @@ class StrengthTest {
           break;
         }
         if (!res.has_value() || !std::get<1>(res.value()).has_value()) {
-          std::cout << "player lost due to timeout" << std::endl;
+          if (!res.has_value()) {
+            std::cout << "player lost due to timeout" << std::endl;
+          } else {
+            std::cout << "player lost due to missing move" << std::endl;
+          }
           // player failed to move -- they lose
           if ((game_id % 2) == (move_id % 2)) {
             player2_score += 1;
@@ -114,9 +130,14 @@ class StrengthTest {
     num_completed_games_++;
 
     float player2_win_rate = (float)player2_score_ / (float)num_completed_games_;
+    float player1_avg_search_depth = (float)player1_total_search_depth_ / (float)player1_num_searches_;
+    float player2_avg_search_depth = (float)player2_total_search_depth_ / (float)player2_num_searches_;
     std::cout
       << "Game: " << num_completed_games_
-      << " Player 2 win rate: " << player2_win_rate << std::endl;
+      << " Player 2 win rate: " << player2_win_rate
+      << " Player 1 avg search depth: " << player1_avg_search_depth
+      << " Player 2 avg search depth: " << player2_avg_search_depth
+      << std::endl;
   }
 
  private:
@@ -127,6 +148,10 @@ class StrengthTest {
   std::optional<std::chrono::milliseconds> move_time_limit_;
   PlayerOptions player1_options_;
   PlayerOptions player2_options_;
+  int player1_num_searches_ = 0;
+  int player1_total_search_depth_ = 0;
+  int player2_num_searches_ = 0;
+  int player2_total_search_depth_ = 0;
 };
 
 void RunStrengthTest() {

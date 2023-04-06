@@ -14,6 +14,8 @@
 
 namespace chess {
 
+constexpr int kMobilityMultiplier = 5;
+
 const BoardLocation kRedInitialRookLocationKingside(13, 10);
 const BoardLocation kRedInitialRookLocationQueenside(13, 3);
 const BoardLocation kBlueInitialRookLocationKingside(10, 0);
@@ -1149,12 +1151,12 @@ int Board::PieceEvaluation() const {
   return piece_evaluation_;
 }
 
-float Board::MobilityEvaluation(const Player& player) {
+int Board::MobilityEvaluation(const Player& player) {
   Player turn = turn_;
   turn_ = player;
-  float mobility = 0;
+  int mobility = 0;
   auto moves = GetPseudoLegalMoves();
-  float player_mobility = (float) moves.size();
+  int player_mobility = (int) moves.size();
 
   if (turn_.GetTeam() == RED_YELLOW) {
     mobility += player_mobility;
@@ -1162,20 +1164,20 @@ float Board::MobilityEvaluation(const Player& player) {
     mobility -= player_mobility;
   }
 
-  mobility *= 0.05;
+  mobility *= kMobilityMultiplier;
 
   turn_ = turn;
   return mobility;
 }
 
-float Board::MobilityEvaluation() {
+int Board::MobilityEvaluation() {
   Player turn = turn_;
 
-  float mobility = 0;
+  int mobility = 0;
   for (int player_color = 0; player_color < 4; ++player_color) {
     turn_ = Player(static_cast<PlayerColor>(player_color));
     auto moves = GetPseudoLegalMoves();
-    float player_mobility = (float) moves.size();
+    int player_mobility = (int) moves.size();
 
     if (turn_.GetTeam() == RED_YELLOW) {
       mobility += player_mobility;
@@ -1184,7 +1186,7 @@ float Board::MobilityEvaluation() {
     }
   }
 
-  mobility *= 0.05;
+  mobility *= kMobilityMultiplier;
 
   turn_ = turn;
   return mobility;
@@ -1197,11 +1199,12 @@ Board::Board(
   : turn_(std::move(turn))
     {
 
-  piece_evaluations_[PAWN] = 1;
-  piece_evaluations_[KNIGHT] = 3;
-  piece_evaluations_[BISHOP] = 4;
-  piece_evaluations_[ROOK] = 5;
-  piece_evaluations_[QUEEN] = 10;
+  // In centipawns
+  piece_evaluations_[PAWN] = 100;
+  piece_evaluations_[KNIGHT] = 300;
+  piece_evaluations_[BISHOP] = 400;
+  piece_evaluations_[ROOK] = 500;
+  piece_evaluations_[QUEEN] = 1000;
   piece_evaluations_[KING] = 0;
 
   if (castling_rights.has_value()) {
@@ -1240,16 +1243,16 @@ Board::Board(
   struct {
     bool operator()(const PlacedPiece& a, const PlacedPiece& b) {
       // this doesn't need to be fast.
-      float piece_move_order_scores[6];
-      piece_move_order_scores[PAWN] = 0.1;
-      piece_move_order_scores[KNIGHT] = 0.2;
-      piece_move_order_scores[BISHOP] = 0.3;
-      piece_move_order_scores[ROOK] = 0.4;
-      piece_move_order_scores[QUEEN] = 0.5;
-      piece_move_order_scores[KING] = 0.0;
+      int piece_move_order_scores[6];
+      piece_move_order_scores[PAWN] = 1;
+      piece_move_order_scores[KNIGHT] = 2;
+      piece_move_order_scores[BISHOP] = 3;
+      piece_move_order_scores[ROOK] = 4;
+      piece_move_order_scores[QUEEN] = 5;
+      piece_move_order_scores[KING] = 0;
 
-      float order_a = piece_move_order_scores[a.GetPiece()->GetPieceType()];
-      float order_b = piece_move_order_scores[b.GetPiece()->GetPieceType()];
+      int order_a = piece_move_order_scores[a.GetPiece()->GetPieceType()];
+      int order_b = piece_move_order_scores[b.GetPiece()->GetPieceType()];
       return order_a < order_b;
     }
   } customLess;
@@ -1533,17 +1536,14 @@ std::string Move::PrettyStr() const {
 }
 
 bool Board::DeliversCheck(const Move& move) {
-  const Player& player = GetTurn();
+  int other_color = static_cast<int>(GetTurn().GetColor() + 1) % 4;
 
   MakeMove(move);
 
   const Piece* piece = GetPiece(move.To());
-  if (piece == nullptr) {
-  }
   assert(piece != nullptr);
   bool checks = false;
 
-  int other_color = static_cast<int>(player.GetColor() + 1) % 4;
   for (int add = 0; add < 4; add += 2) {
     int other = (other_color + add) % 4;
     auto king_loc = GetKingLocation(Player(static_cast<PlayerColor>(other)));
@@ -1577,6 +1577,14 @@ bool Board::DeliversCheck(const Move& move) {
   UndoMove();
 
   return checks;
+}
+
+void Board::MakeNullMove() {
+  turn_ = GetNextPlayer(turn_);
+}
+
+void Board::UndoNullMove() {
+  turn_ = GetPreviousPlayer(turn_);
 }
 
 }  // namespace chess

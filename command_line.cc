@@ -137,7 +137,7 @@ void CommandLine::StartEvaluation() {
         if (duration_ms.count() > 0) {
           nps = (int) (((float)num_evals) / (duration_ms.count() / 1000.0));
         }
-        int score_centipawn = (int) (100.0 * std::get<0>(res.value()));
+        int score_centipawn = std::get<0>(res.value());
         std::string pv = GetPVStr(*player);
 
         std::cout

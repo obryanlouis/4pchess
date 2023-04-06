@@ -261,6 +261,12 @@ class Move {
   bool IsCapture() const {
     return standard_capture_ != nullptr || en_passant_capture_ != nullptr;
   }
+  const Piece* GetCapturePiece() const {
+    if (standard_capture_ == nullptr) {
+      return en_passant_capture_;
+    }
+    return standard_capture_;
+  }
 
   bool operator==(const Move& other) const {
     return from_ == other.from_
@@ -359,8 +365,8 @@ class Board {
 
   Team TeamToPlay() const;
   int PieceEvaluation() const;
-  float MobilityEvaluation();
-  float MobilityEvaluation(const Player& player);
+  int MobilityEvaluation();
+  int MobilityEvaluation(const Player& player);
   const Player& GetTurn() const { return turn_; }
   bool IsAttackedByTeam(
       Team team,
@@ -404,6 +410,7 @@ class Board {
   const Move& GetLastMove() const {
     return moves_.back();
   }
+  int NumMoves() const { return moves_.size(); }
 
 
   void GetPawnMoves(
@@ -433,6 +440,13 @@ class Board {
 
   friend std::ostream& operator<<(
       std::ostream& os, const Board& board);
+
+  // Use with caution: after you set the player you must reset it to its
+  // original value before calling UndoMove past the current moves.
+  // These functions may be used by things such as null move pruning.
+  void SetPlayer(const Player& player) { turn_ = player; }
+  void MakeNullMove();
+  void UndoNullMove();
 
  private:
 

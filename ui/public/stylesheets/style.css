@@ -7,19 +7,6 @@ a {
   color: #00B7FF;
 }
 
-.move-history {
-  max-height: 500px;
-  overflow: scroll;
-}
-
-.move-history p {
-  margin: 0px;
-  padding-left: 0px;
-  padding-right: 0px;
-  padding-top: 3px;
-  padding-bottom: 3px;
-}
-
 .eval-estimate {
   font-size: 16px;
   padding: 4px;

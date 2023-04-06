@@ -409,23 +409,6 @@ function displayBoard() {
     }
     var move_html = row_elements.join('\n');
     $('#move_history').html(move_html);
-
-    var debug_parts = [];
-    for (var move_id = 0; move_id < moves.length && move_id < move_index + 1; move_id++) {
-      var move, piece_type;
-      [move, piece_type] = moves.at(move_id);
-      var from = move.getFrom();
-      var from_row = from.getRow();
-      var from_col = from.getCol();
-      var to = move.getTo();
-      var to_row = to.getRow();
-      var to_col = to.getCol();
-      var debug_text = `Move(BoardLocation(${from_row}, ${from_col}), BoardLocation(${to_row}, ${to_col}))`;
-      debug_parts.push(`<p>${debug_text}</p>`);
-    }
-    var debug_html = debug_parts.join('\n');
-
-    $('#move_history').append(debug_html);
   }
 
   var board_key = getBoardKey();

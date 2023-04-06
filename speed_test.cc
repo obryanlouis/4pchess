@@ -18,7 +18,7 @@ TEST(Speed, BoardTest) {
   AlphaBetaPlayer player(options);
   player.EnableDebug(true);
 
-  std::chrono::milliseconds time_limit(1000);
+  std::chrono::milliseconds time_limit(10000);
   auto res = player.MakeMove(*board, time_limit);
 //  auto res = player.MakeMove(*board, std::nullopt, 4);
 
@@ -32,6 +32,22 @@ TEST(Speed, BoardTest) {
     float cache_hit_rate = (float)player.GetNumCacheHits() /
       (float)player.GetNumEvaluations();
     std::cout << "Cache hit rate: " << cache_hit_rate << std::endl;
+  }
+  if (options.enable_late_move_reduction) {
+    std::cout << "#LMR searches: " << player.GetNumLmrSearches()
+      << std::endl;
+    std::cout << "#LMR re-searches: " << player.GetNumLmrResearches()
+      << std::endl;
+  }
+  if (options.enable_null_move_pruning) {
+    std::cout << "#Null moves tried: " << player.GetNumNullMovesTried()
+      << std::endl;
+    std::cout << "#Null moves pruned: " << player.GetNumNullMovesPruned()
+      << std::endl;
+  }
+  if (options.enable_futility_pruning) {
+    std::cout << "#Futility moves pruned: " << player.GetNumFutilityMovesPruned()
+      << std::endl;
   }
 
   if (res.has_value() && std::get<1>(res.value()).has_value()) {

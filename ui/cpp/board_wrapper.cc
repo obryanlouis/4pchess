@@ -350,7 +350,7 @@ void Player::MakeMove(const v8::FunctionCallbackInfo<v8::Value>& args) {
     //     'to': {'row': int, 'col': int}}
     //   ]}
 
-    float evaluation = std::get<0>(move_res.value());
+    float evaluation = std::get<0>(move_res.value()) / 100.0;
 
     Local<Object> res = Object::New(isolate);
 
@@ -370,7 +370,8 @@ void Player::MakeMove(const v8::FunctionCallbackInfo<v8::Value>& args) {
     }
 
     // for debugging
-    float zero_move_evaluation = player.Evaluate(*board);
+    player.ResetMobilityScores(*board);
+    float zero_move_evaluation = player.Evaluate(*board, true) / 100.0f;
     res->Set(context, String::NewFromUtf8Literal(isolate, "zero_move_evaluation"),
              v8::Number::New(isolate, zero_move_evaluation)).Check();
 
