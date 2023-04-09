@@ -24,8 +24,8 @@ class StrengthTest {
       move_time_limit_ = std::chrono::milliseconds(kMoveTimeLimitMs);
     }
 
-    player1_options_.enable_late_move_reduction = false;
-    player2_options_.enable_late_move_reduction = true;
+    player1_options_.enable_killers = false;
+    player2_options_.enable_killers = true;
   }
 
   void Run() {

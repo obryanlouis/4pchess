@@ -14,11 +14,11 @@ TEST(Speed, BoardTest) {
   auto start = std::chrono::system_clock::now();
   auto board = Board::CreateStandardSetup();
   PlayerOptions options;
-  options.enable_late_move_reduction = true;
+  options.enable_killers = true;
   AlphaBetaPlayer player(options);
   player.EnableDebug(true);
 
-  std::chrono::milliseconds time_limit(10000);
+  std::chrono::milliseconds time_limit(5000);
   auto res = player.MakeMove(*board, time_limit);
 //  auto res = player.MakeMove(*board, std::nullopt, 4);
 
@@ -29,6 +29,7 @@ TEST(Speed, BoardTest) {
   std::cout << "Nodes/sec: " << nps << std::endl;
   std::cout << "Nodes: " << player.GetNumEvaluations() << std::endl;
   if (options.enable_transposition_table) {
+    std::cout << "#Cache hits: " << player.GetNumCacheHits() << std::endl;
     float cache_hit_rate = (float)player.GetNumCacheHits() /
       (float)player.GetNumEvaluations();
     std::cout << "Cache hit rate: " << cache_hit_rate << std::endl;

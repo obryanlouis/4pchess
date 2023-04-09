@@ -16,6 +16,8 @@ const Player kBluePlayer = Player(BLUE);
 const Player kYellowPlayer = Player(YELLOW);
 const Player kGreenPlayer = Player(GREEN);
 
+constexpr int kMateValue = 1000000'00;  // mate value (centipawns)
+
 
 TEST(PlayerTest, EvaluateCheckmate) {
   // Team is in checkmate already
@@ -35,7 +37,7 @@ TEST(PlayerTest, EvaluateCheckmate) {
   float valuation = std::get<0>(res.value());
   const auto& move_or = std::get<1>(res.value());
   EXPECT_FALSE(move_or.has_value());
-  EXPECT_EQ(valuation, -std::numeric_limits<float>::infinity());
+  EXPECT_EQ(valuation, -kMateValue);
 }
 
 TEST(PlayerTest, EvaluateCheckmateNextMove) {
@@ -56,7 +58,7 @@ TEST(PlayerTest, EvaluateCheckmateNextMove) {
   float valuation = std::get<0>(res.value());
   const auto& move_or = std::get<1>(res.value());
   EXPECT_TRUE(move_or.has_value());
-  EXPECT_EQ(valuation, std::numeric_limits<float>::infinity());
+  EXPECT_EQ(valuation, kMateValue);
 }
 
 TEST(PlayerTest, EvaluateStalemate) {
@@ -113,7 +115,7 @@ TEST(PlayerTest, EvaluateCheckmateForcedCheckmate1) {
   const auto& res = player.MakeMove(*board);
   ASSERT_TRUE(res.has_value());
   float valuation = std::get<0>(res.value());
-  EXPECT_EQ(valuation, std::numeric_limits<float>::infinity());
+  EXPECT_EQ(valuation, kMateValue);
   const auto& move_or = std::get<1>(res.value());
   ASSERT_TRUE(move_or.has_value());
   EXPECT_EQ(move_or.value(), Move(BoardLocation(13, 8), BoardLocation(11, 6)));
@@ -150,9 +152,8 @@ TEST(PlayerTest, CheckPVInfoProducesValidMoves) {
   EXPECT_EQ(num_pvmoves, kDepth);
 }
 
-TEST(PlayerTest, Quiescence) {
+TEST(PlayerTest, StaticExchangeEvaluation) {
   PlayerOptions options;
-  options.enable_mobility_evaluation = false;
   options.enable_quiescence = true;
   AlphaBetaPlayer player(options);
 
@@ -162,28 +163,15 @@ TEST(PlayerTest, Quiescence) {
   board->MakeMove(Move(BoardLocation(7, 1), BoardLocation(7, 2)));
   board->MakeMove(Move(BoardLocation(1, 6), BoardLocation(2, 6)));
   board->MakeMove(Move(BoardLocation(6, 12), BoardLocation(6, 11)));
-//  board->MakeMove(Move(BoardLocation(13, 6), BoardLocation(10, 9)));
-//  board->MakeMove(Move(BoardLocation(6, 0), BoardLocation(9, 3)));
 
-//  board->MakeMove(Move(BoardLocation(0, 7), BoardLocation(3, 4)));
-//  board->MakeMove(Move(BoardLocation(7, 13), BoardLocation(4, 10)));
-//  board->MakeMove(Move(BoardLocation(13, 8), BoardLocation(9, 4)));
-//  board->MakeMove(Move(BoardLocation(9, 3), BoardLocation(7, 5)));
-//  board->MakeMove(Move(BoardLocation(3, 4), BoardLocation(5, 6)));
-//  board->MakeMove(Move(BoardLocation(4, 10), BoardLocation(1, 7)));
+  // Qg1 x m7
+  BoardLocation from(13, 6);
+  BoardLocation to(7, 12);
+  Move move(from, to, board->GetPiece(to));
 
-  // Best depth-2 move
-  const auto res_or = player.MakeMove(*board, std::nullopt, 1);
-  ASSERT_TRUE(res_or.has_value());
-  const auto& res = res_or.value();
-  float score = std::get<0>(res);
-  auto move_or = std::get<1>(res);
-  ASSERT_TRUE(move_or.has_value());
+  int see = player.StaticExchangeEvaluationCapture(*board, move);
 
-  std::cout
-    << "score: " << score
-    << " move: " << move_or.value()
-    << std::endl;
+  EXPECT_LT(see, 0);
 }
 
 }  // namespace chess

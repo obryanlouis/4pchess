@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "board.h"
+#include "transposition_table.h"
 
 namespace chess {
 
@@ -30,7 +31,8 @@ class PVInfo {
 };
 
 constexpr size_t kTranspositionTableSize = 10'000'000;
-constexpr int kMaxMoves = 300;
+constexpr int kMaxPly = 300;
+constexpr int kKillersPerPly = 3;
 
 struct PlayerOptions {
   bool enable_move_order = true;
@@ -40,12 +42,14 @@ struct PlayerOptions {
   bool pvs = true;
   bool enable_null_move_pruning = true;
   bool enable_late_move_reduction = true;
+  bool enable_killers = true;
+
+  // Only starts being better at around 20-30 sec/move.
+  bool enable_transposition_table = true;
 
   // generic test change
   bool test = false;
 
-  bool enable_static_exchange = false;
-  bool enable_transposition_table = false; // low hit rate, ineffective
   bool enable_quiescence = false;
   bool enable_history_leaf_pruning = false;
   bool enable_futility_pruning = false;
@@ -56,16 +60,8 @@ struct PlayerOptions {
   std::optional<int> max_search_depth;
 };
 
-enum ScoreBound {
-  EXACT = 0, LOWER_BOUND = 1, UPPER_BOUND = 2,
-};
-
-struct HashTableEntry {
-  int64_t key;
-  int depth;
-  std::optional<Move> move;
-  int score;
-  ScoreBound bound;
+struct Stack {
+  Move killers[2];
 };
 
 class AlphaBetaPlayer {
@@ -77,7 +73,8 @@ class AlphaBetaPlayer {
       int max_depth = 20);
   int Evaluate(Board& board, bool maximizing_player);
   std::vector<Move> MoveOrder(
-      Board& board, bool maximizing_player, const std::optional<Move>& pvmove);
+      Board& board, bool maximizing_player, const std::optional<Move>& pvmove,
+      Move* killers = nullptr);
   void CancelEvaluation() { canceled_ = true; }
   // NOTE: Should wait until evaluation is done before resetting this to true.
   void SetCanceled(bool canceled) { canceled_ = canceled; }
@@ -85,9 +82,10 @@ class AlphaBetaPlayer {
   const PVInfo& GetPVInfo() const { return pv_info_; }
 
   std::optional<std::tuple<int, std::optional<Move>>> Search(
+      Stack* ss,
       Board& board,
+      int ply,
       int depth,
-      int depth_left,
       int alpha,
       int beta,
       bool maximizing_player,
@@ -102,17 +100,17 @@ class AlphaBetaPlayer {
       int depth,
       int f);
 
-//  std::optional<int> QuiescenceSearch(
-//      Board& board,
-//      int depth_left,
-//      int alpha,
-//      int beta,
-//      bool maximizing_player,
-//      int moves_since_last_active,
-//      const std::optional<
-//          std::chrono::time_point<std::chrono::system_clock>>& deadline);
+  std::optional<int> QuiescenceSearch(
+      Board& board,
+      int depth,
+      int alpha,
+      int beta,
+      bool maximizing_player,
+      int moves_since_last_active,
+      const std::optional<
+          std::chrono::time_point<std::chrono::system_clock>>& deadline);
 
-  int GetNumEvaluations() { return num_evaluations_; }
+  int GetNumEvaluations() { return num_nodes_; }
   int GetNumCacheHits() { return num_cache_hits_; }
   int GetNumNullMovesTried() { return num_null_moves_tried_; }
   int GetNumNullMovesPruned() { return num_null_moves_pruned_; }
@@ -120,33 +118,39 @@ class AlphaBetaPlayer {
   int GetNumLmrSearches() { return num_lmr_searches_; }
   int GetNumLmrResearches() { return num_lmr_researches_; }
 
-  ~AlphaBetaPlayer() {
-    if (hash_table_ != nullptr) {
-      delete[] hash_table_;
-    }
-  }
+//  ~AlphaBetaPlayer() {
+//    if (hash_table_ != nullptr) {
+//      delete[] hash_table_;
+//    }
+//  }
 
   void EnableDebug(bool enable) { enable_debug_ = enable; }
   void ResetMobilityScores(Board& board);
-  int Reduction(int depth_left, int move_number) const;
+  int Reduction(int depth, int move_number) const;
 
- private:
-
+  // Returns SEE
   int StaticExchangeEvaluation(
-      const Board& board,
-      const Move& move) const;
+      const Board& board, const BoardLocation& loc) const;
+
+  // Returns SEE for a capture. Does not apply to en-passant capture.
+  int StaticExchangeEvaluationCapture(
+      Board& board, const Move& move) const;
+
+  // Helper for SEE calculation
   int StaticExchangeEvaluation(
       int square_piece_eval,
       const std::vector<int>& sorted_piece_values,
       size_t pos,
       const std::vector<int>& other_team_sorted_piece_values,
       size_t other_team_pos) const;
-  std::vector<Move> PrunedMoveOrder(
-      Board& board, bool maximizing_player, bool prune);
+
+ private:
+
   void ResetHistoryHeuristic();
   void ResetHistoryCounters();
+  void UpdateQuietStats(Stack* ss, const Move& move);
 
-  int num_evaluations_ = 0; // debugging
+  int num_nodes_ = 0; // debugging
   int num_cache_hits_ = 0;
   int num_null_moves_tried_ = 0;
   int num_null_moves_pruned_ = 0;
@@ -159,7 +163,10 @@ class AlphaBetaPlayer {
   int piece_move_order_scores_[6];
   PlayerOptions options_;
   int player_mobility_scores_[4];
-  HashTableEntry* hash_table_ = nullptr;
+
+  //HashTableEntry* hash_table_ = nullptr;
+  std::unique_ptr<TranspositionTable> transposition_table_;
+
   // TODO: use this if needed
   std::atomic<bool> enable_debug_ = false;
 
@@ -169,7 +176,7 @@ class AlphaBetaPlayer {
   // counters for each historical move (number of times encountered)
   // (player_color, from_row, from_col, to_row, to_col)
   int history_counter_[4][14][14][14][14];
-  int reductions_[kMaxMoves];
+  int reductions_[kMaxPly];
 };
 
 }  // namespace chess

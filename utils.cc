@@ -199,6 +199,9 @@ std::shared_ptr<Board> ParseBoardFromFEN(const std::string& fen) {
         location_to_piece[location] = piece;
 
         col++;
+      } else if (ch == 'x') {
+        // parse empty square
+        col += 1;
       } else {
         // Parse empty spaces
         std::optional<int> num_empty = ParseInt(col_str);

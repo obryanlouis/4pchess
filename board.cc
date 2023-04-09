@@ -1205,7 +1205,7 @@ Board::Board(
   piece_evaluations_[BISHOP] = 400;
   piece_evaluations_[ROOK] = 500;
   piece_evaluations_[QUEEN] = 1000;
-  piece_evaluations_[KING] = 0;
+  piece_evaluations_[KING] = 10000;
 
   if (castling_rights.has_value()) {
     castling_rights_ = std::move(castling_rights.value());
@@ -1580,11 +1580,19 @@ bool Board::DeliversCheck(const Move& move) {
 }
 
 void Board::MakeNullMove() {
+  int t = static_cast<int>(turn_.GetColor());
+  UpdateTurnHash(t);
+  UpdateTurnHash((t+1)%4);
+
   turn_ = GetNextPlayer(turn_);
 }
 
 void Board::UndoNullMove() {
   turn_ = GetPreviousPlayer(turn_);
+
+  int t = static_cast<int>(turn_.GetColor());
+  UpdateTurnHash(t);
+  UpdateTurnHash((t+1)%4);
 }
 
 }  // namespace chess

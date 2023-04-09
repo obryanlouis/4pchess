@@ -20,6 +20,7 @@ cc_library(
     srcs = ["player.cc"],
     deps = [
         ":board",
+        ":transposition_table",
     ],
 )
 
@@ -80,5 +81,24 @@ cc_library(
         ":player",
         ":utils",
     ],
+)
+
+cc_test(
+    name = "utils_test",
+    srcs = ["utils_test.cc"],
+    deps = [
+        ":utils",
+        ":board",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "transposition_table",
+    srcs = ["transposition_table.cc"],
+    hdrs = ["transposition_table.h"],
+    deps = [
+        ":board",
+    ]
 )
 

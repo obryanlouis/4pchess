@@ -259,12 +259,11 @@ void CommandLine::HandleCommand(
         SendInvalidCommandMessage(line);
       }
       const auto& fen = parts[2];
-      auto board = ParseBoardFromFEN(fen);
+      board = ParseBoardFromFEN(fen);
       if (board == nullptr) {
         SendInfoMessage("Invalid FEN: " + fen);
         return;
       }
-      board = std::move(board);
       next_pos += 2;
     } else {
       if (parts[1] == "startpos") {
@@ -275,6 +274,9 @@ void CommandLine::HandleCommand(
 
     if (parts.size() < next_pos + 1) {
       // Invalid, but we'll accept it
+      StopEvaluation();
+      ResetPlayer();
+      SetBoard(std::move(board));
       return;
     }
     if (parts[next_pos] != "moves") {
@@ -293,6 +295,8 @@ void CommandLine::HandleCommand(
       board->MakeMove(move_or.value());
     }
 
+    StopEvaluation();
+    ResetPlayer();
     SetBoard(std::move(board));
 
   } else if (command == "go") {

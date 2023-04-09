@@ -7,6 +7,7 @@
         "cpp/board_wrapper.cc",
         "../board.cc",
         "../player.cc",
+        "../transposition_table.cc",
       ],
     }
   ]

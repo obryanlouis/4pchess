@@ -1415,15 +1415,45 @@ TEST(HelperFunctionsTest, OtherTeam) {
 
 TEST(BoardTest, KeyTest) {
   auto board = Board::CreateStandardSetup();
-  Move move(BoardLocation(12, 7), BoardLocation(11, 7));
   int64_t h0 = board->HashKey();
-  board->MakeMove(move);
+  board->MakeMove(Move(BoardLocation(12, 7), BoardLocation(11, 7))); // h3
   int64_t h1 = board->HashKey();
-  board->UndoMove();
+  board->MakeMove(Move(BoardLocation(7, 1), BoardLocation(7, 2))); // c7
   int64_t h2 = board->HashKey();
+  board->MakeMove(Move(BoardLocation(1, 6), BoardLocation(2, 6))); // g12
+  int64_t h3 = board->HashKey();
+  board->MakeMove(Move(BoardLocation(6, 12), BoardLocation(6, 11))); // l8
+  int64_t h4 = board->HashKey();
+  board->MakeMove(Move(BoardLocation(13, 6), BoardLocation(7, 12),
+                  board->GetPiece(BoardLocation(7, 12)))); // Qxm7
+  int64_t h5 = board->HashKey();
+  board->MakeMove(Move(BoardLocation(6, 0), BoardLocation(12, 6),
+                  board->GetPiece(BoardLocation(12, 6)))); // Qxg2
 
-  EXPECT_EQ(h0, h2);
+  board->UndoMove();
+  int64_t h5_1 = board->HashKey();
+  board->UndoMove();
+  int64_t h4_1 = board->HashKey();
+  board->UndoMove();
+  int64_t h3_1 = board->HashKey();
+  board->UndoMove();
+  int64_t h2_1 = board->HashKey();
+  board->UndoMove();
+  int64_t h1_1 = board->HashKey();
+  board->UndoMove();
+  int64_t h0_1 = board->HashKey();
+
+  EXPECT_EQ(h0, h0_1);
+  EXPECT_EQ(h1, h1_1);
+  EXPECT_EQ(h2, h2_1);
+  EXPECT_EQ(h3, h3_1);
+  EXPECT_EQ(h4, h4_1);
+  EXPECT_EQ(h5, h5_1);
+
   EXPECT_NE(h0, h1);
+  EXPECT_NE(h0, h2);
+  EXPECT_NE(h0, h3);
+  EXPECT_NE(h0, h5);
 }
 
 TEST(BoardTest, IsKingInCheck) {
