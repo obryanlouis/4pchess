@@ -35,11 +35,12 @@ std::mutex Player::mutex_;
 std::vector<Player*> Player::players_;
 
 
-PlacedPiece::PlacedPiece(int row, int col, int piece_type, int player_color)
+PlacedPiece::PlacedPiece(v8::Isolate* isolate, int row, int col, int piece_type, int player_color)
   : location_(row, col) {
   assert(0 <= player_color && player_color < 4);
   piece_ = Piece(chess::Player(static_cast<PlayerColor>(player_color)),
                  static_cast<PieceType>(piece_type));
+  node::AddEnvironmentCleanupHook(isolate, DeleteInstance, this);
 }
 
 void PlacedPiece::Init(v8::Local<v8::Object> exports) {
@@ -77,7 +78,7 @@ void PlacedPiece::New(const v8::FunctionCallbackInfo<v8::Value>& args) {
     int piece_type = args[2]->Int32Value(context).FromJust();
     int player_color = args[3]->Int32Value(context).FromJust();
 
-    PlacedPiece* obj = new PlacedPiece(row, col, piece_type, player_color);
+    PlacedPiece* obj = new PlacedPiece(isolate, row, col, piece_type, player_color);
     obj->Wrap(args.This());
     args.GetReturnValue().Set(args.This());
   } else {
@@ -115,10 +116,11 @@ void PlacedPiece::DebugString(const v8::FunctionCallbackInfo<v8::Value>& args) {
 }
 
 
-CastlingRights::CastlingRights(int player_color, bool kingside, bool queenside)
+CastlingRights::CastlingRights(v8::Isolate* isolate, int player_color, bool kingside, bool queenside)
   : player_(static_cast<PlayerColor>(player_color)),
     rights_(kingside, queenside) {
   assert(0 <= player_color && player_color < 4);
+  node::AddEnvironmentCleanupHook(isolate, DeleteInstance, this);
 }
 
 void CastlingRights::Init(v8::Local<v8::Object> exports) {
@@ -155,7 +157,7 @@ void CastlingRights::New(const v8::FunctionCallbackInfo<v8::Value>& args) {
     bool kingside = args[1]->BooleanValue(isolate);
     bool queenside = args[2]->BooleanValue(isolate);
 
-    CastlingRights* obj = new CastlingRights(player_color, kingside, queenside);
+    CastlingRights* obj = new CastlingRights(isolate, player_color, kingside, queenside);
     obj->Wrap(args.This());
     args.GetReturnValue().Set(args.This());
   } else {
@@ -188,6 +190,11 @@ void CastlingRights::DebugString(const v8::FunctionCallbackInfo<v8::Value>& args
   std::string s = obj->ToStr();
   MaybeLocal<String> local_s = String::NewFromUtf8(isolate, s.data());
   args.GetReturnValue().Set(local_s.ToLocalChecked());
+}
+
+Board::Board(v8::Isolate* isolate, std::unique_ptr<chess::Board> board)
+  : board_(std::move(board)) {
+  node::AddEnvironmentCleanupHook(isolate, DeleteInstance, this);
 }
 
 void Board::Init(v8::Local<v8::Object> exports) {
@@ -247,7 +254,7 @@ void Board::New(const v8::FunctionCallbackInfo<v8::Value>& args) {
         std::move(piece_map),
         std::move(castling_map));
 
-    Board* obj = new Board(std::move(board));
+    Board* obj = new Board(isolate, std::move(board));
     obj->Wrap(args.This());
     args.GetReturnValue().Set(args.This());
   } else {
@@ -308,7 +315,7 @@ void Player::New(const v8::FunctionCallbackInfo<v8::Value>& args) {
   Local<Context> context = isolate->GetCurrentContext();
 
   if (args.IsConstructCall()) {
-    Player* obj = new Player();
+    Player* obj = new Player(isolate);
     obj->Wrap(args.This());
     args.GetReturnValue().Set(args.This());
   } else {
@@ -440,9 +447,10 @@ void Player::CancelEvaluation(const v8::FunctionCallbackInfo<v8::Value>& args) {
   obj->GetPlayer().CancelEvaluation();
 }
 
-Player::Player() {
+Player::Player(v8::Isolate* isolate) {
   CancelAllEvaluations();
   AddToGlobalObjList(this);
+  node::AddEnvironmentCleanupHook(isolate, DeleteInstance, this);
 }
 
 Player::~Player() {

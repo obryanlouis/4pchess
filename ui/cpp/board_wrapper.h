@@ -17,12 +17,13 @@ class PlacedPiece : public node::ObjectWrap {
  public:
   PlacedPiece(const PlacedPiece&) = default;
   static void Init(v8::Local<v8::Object> exports);
+  static void DeleteInstance(void* data) { delete static_cast<PlacedPiece*>(data); }
 
   const chess::BoardLocation GetLocation() const { return location_; }
   const chess::Piece GetPiece() const { return piece_; }
 
  private:
-  PlacedPiece(int row, int col, int piece_type, int player_color);
+  PlacedPiece(v8::Isolate* isolate, int row, int col, int piece_type, int player_color);
   std::string ToStr() const;
 
   static void New(const v8::FunctionCallbackInfo<v8::Value>& args);
@@ -35,12 +36,13 @@ class PlacedPiece : public node::ObjectWrap {
 class CastlingRights : public node::ObjectWrap {
  public:
   static void Init(v8::Local<v8::Object> exports);
+  static void DeleteInstance(void* data) { delete static_cast<CastlingRights*>(data); }
 
   const chess::Player& GetPlayer() const { return player_; }
   const chess::CastlingRights& GetRights() const { return rights_; }
 
  private:
-  CastlingRights(int player_color, bool kingside, bool queenside);
+  CastlingRights(v8::Isolate* isolate, int player_color, bool kingside, bool queenside);
   std::string ToStr() const;
 
   static void New(const v8::FunctionCallbackInfo<v8::Value>& args);
@@ -53,12 +55,12 @@ class CastlingRights : public node::ObjectWrap {
 class Board : public node::ObjectWrap {
  public:
   static void Init(v8::Local<v8::Object> exports);
+  static void DeleteInstance(void* data) { delete static_cast<Board*>(data); }
 
   chess::Board* GetBoard() { return board_.get(); }
 
  private:
-  explicit Board(std::unique_ptr<chess::Board> board)
-    : board_(std::move(board)) { }
+  explicit Board(v8::Isolate* isolate, std::unique_ptr<chess::Board> board);
   std::string ToStr() const;
 
   static void New(const v8::FunctionCallbackInfo<v8::Value>& args);
@@ -69,10 +71,11 @@ class Board : public node::ObjectWrap {
 
 class Player : public node::ObjectWrap {
  public:
-  Player();
+  Player(v8::Isolate* isolate);
   ~Player();
 
   static void Init(v8::Local<v8::Object> exports);
+  static void DeleteInstance(void* data) { delete static_cast<Player*>(data); }
 
   chess::AlphaBetaPlayer& GetPlayer() { return player_; }
 
