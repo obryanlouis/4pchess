@@ -511,7 +511,7 @@ class Board {
   int piece_evaluation_ = 0;
 
   int64_t hash_key_ = 0;
-  int64_t piece_hashes_[4][14][14];
+  int64_t piece_hashes_[6][14][14];
   int64_t turn_hashes_[4];
 
 };

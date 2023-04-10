@@ -6,6 +6,7 @@
 #include <vector>
 #include <mutex>
 
+#include <iostream>
 #include <node.h>
 #include <node_object_wrap.h>
 #include "../../board.h"
@@ -13,11 +14,40 @@
 
 namespace board_wrapper {
 
-class PlacedPiece : public node::ObjectWrap {
+// Like node::ObjectWrap, except it doesn't delete the itself automatically.
+// Individual subclasses are responsible for deleting instances.
+// node::ObjectWrap sets a weak callback that can result in double-deleting
+// instances, causing segfaults.
+class MyObjectWrap {
+ public:
+
+  template <class T>
+  static inline T* Unwrap(v8::Local<v8::Object> handle) {
+    assert(!handle.IsEmpty());
+    assert(handle->InternalFieldCount() > 0);
+    void* ptr = handle->GetAlignedPointerFromInternalField(0);
+    MyObjectWrap* wrap = static_cast<MyObjectWrap*>(ptr);
+    return static_cast<T*>(wrap);
+  }
+
+  inline void Wrap(v8::Local<v8::Object> handle) {
+    assert(handle_.IsEmpty());
+    assert(handle->InternalFieldCount() > 0);
+    handle->SetAlignedPointerInInternalField(0, this);
+    handle_.Reset(v8::Isolate::GetCurrent(), handle);
+  }
+
+ private:
+  v8::Persistent<v8::Object> handle_;
+};
+
+class PlacedPiece : public MyObjectWrap {
  public:
   PlacedPiece(const PlacedPiece&) = default;
   static void Init(v8::Local<v8::Object> exports);
-  static void DeleteInstance(void* data) { delete static_cast<PlacedPiece*>(data); }
+  static void DeleteInstance(void* data) {
+    delete static_cast<PlacedPiece*>(data);
+  }
 
   const chess::BoardLocation GetLocation() const { return location_; }
   const chess::Piece GetPiece() const { return piece_; }
@@ -33,10 +63,12 @@ class PlacedPiece : public node::ObjectWrap {
   chess::Piece piece_;
 };
 
-class CastlingRights : public node::ObjectWrap {
+class CastlingRights : public MyObjectWrap {
  public:
   static void Init(v8::Local<v8::Object> exports);
-  static void DeleteInstance(void* data) { delete static_cast<CastlingRights*>(data); }
+  static void DeleteInstance(void* data) {
+    delete static_cast<CastlingRights*>(data);
+  }
 
   const chess::Player& GetPlayer() const { return player_; }
   const chess::CastlingRights& GetRights() const { return rights_; }
@@ -52,10 +84,12 @@ class CastlingRights : public node::ObjectWrap {
   chess::CastlingRights rights_;
 };
 
-class Board : public node::ObjectWrap {
+class Board : public MyObjectWrap {
  public:
   static void Init(v8::Local<v8::Object> exports);
-  static void DeleteInstance(void* data) { delete static_cast<Board*>(data); }
+  static void DeleteInstance(void* data) {
+    delete static_cast<Board*>(data);
+  }
 
   chess::Board* GetBoard() { return board_.get(); }
 
@@ -69,13 +103,19 @@ class Board : public node::ObjectWrap {
   std::unique_ptr<chess::Board> board_;
 };
 
-class Player : public node::ObjectWrap {
+class Player : public MyObjectWrap {
  public:
   Player(v8::Isolate* isolate);
-  ~Player();
+  ~Player() {
+    RemoveFromGlobalObjList(this);
+  }
 
   static void Init(v8::Local<v8::Object> exports);
-  static void DeleteInstance(void* data) { delete static_cast<Player*>(data); }
+  static void DeleteInstance(void* data) {
+    Player* p = static_cast<Player*>(data);
+    RemoveFromGlobalObjList(p);
+    delete p;
+  }
 
   chess::AlphaBetaPlayer& GetPlayer() { return player_; }
 

@@ -18,6 +18,7 @@ using chess::PieceType;
 using chess::PlayerColor;
 using v8::Array;
 using v8::Context;
+using v8::External;
 using v8::Function;
 using v8::FunctionCallbackInfo;
 using v8::FunctionTemplate;
@@ -40,7 +41,8 @@ PlacedPiece::PlacedPiece(v8::Isolate* isolate, int row, int col, int piece_type,
   assert(0 <= player_color && player_color < 4);
   piece_ = Piece(chess::Player(static_cast<PlayerColor>(player_color)),
                  static_cast<PieceType>(piece_type));
-  node::AddEnvironmentCleanupHook(isolate, DeleteInstance, this);
+  // Register to delete the object.
+  node::AddEnvironmentCleanupHook(isolate, PlacedPiece::DeleteInstance, this);
 }
 
 void PlacedPiece::Init(v8::Local<v8::Object> exports) {
@@ -108,7 +110,7 @@ std::string PlacedPiece::ToStr() const {
 void PlacedPiece::DebugString(const v8::FunctionCallbackInfo<v8::Value>& args) {
   Isolate* isolate = args.GetIsolate();
 
-  PlacedPiece* obj = ObjectWrap::Unwrap<PlacedPiece>(args.Holder());
+  PlacedPiece* obj = MyObjectWrap::Unwrap<PlacedPiece>(args.Holder());
 
   std::string s = obj->ToStr();
   MaybeLocal<String> local_s = String::NewFromUtf8(isolate, s.data());
@@ -120,7 +122,8 @@ CastlingRights::CastlingRights(v8::Isolate* isolate, int player_color, bool king
   : player_(static_cast<PlayerColor>(player_color)),
     rights_(kingside, queenside) {
   assert(0 <= player_color && player_color < 4);
-  node::AddEnvironmentCleanupHook(isolate, DeleteInstance, this);
+  // Register to delete the object.
+  node::AddEnvironmentCleanupHook(isolate, CastlingRights::DeleteInstance, this);
 }
 
 void CastlingRights::Init(v8::Local<v8::Object> exports) {
@@ -185,7 +188,7 @@ std::string CastlingRights::ToStr() const {
 void CastlingRights::DebugString(const v8::FunctionCallbackInfo<v8::Value>& args) {
   Isolate* isolate = args.GetIsolate();
 
-  CastlingRights* obj = ObjectWrap::Unwrap<CastlingRights>(args.Holder());
+  CastlingRights* obj = MyObjectWrap::Unwrap<CastlingRights>(args.Holder());
 
   std::string s = obj->ToStr();
   MaybeLocal<String> local_s = String::NewFromUtf8(isolate, s.data());
@@ -194,7 +197,8 @@ void CastlingRights::DebugString(const v8::FunctionCallbackInfo<v8::Value>& args
 
 Board::Board(v8::Isolate* isolate, std::unique_ptr<chess::Board> board)
   : board_(std::move(board)) {
-  node::AddEnvironmentCleanupHook(isolate, DeleteInstance, this);
+  // Register to delete the object.
+  node::AddEnvironmentCleanupHook(isolate, Board::DeleteInstance, this);
 }
 
 void Board::Init(v8::Local<v8::Object> exports) {
@@ -237,14 +241,14 @@ void Board::New(const v8::FunctionCallbackInfo<v8::Value>& args) {
     v8::Array* pieces_array = v8::Array::Cast(*args[1]);
     for (size_t i = 0; i < pieces_array->Length(); ++i) {
       MaybeLocal<Value> piece = pieces_array->Get(context, i);
-      PlacedPiece* placed_piece = ObjectWrap::Unwrap<PlacedPiece>(
+      PlacedPiece* placed_piece = MyObjectWrap::Unwrap<PlacedPiece>(
           piece.ToLocalChecked()->ToObject(context).ToLocalChecked());
       piece_map[placed_piece->GetLocation()] = placed_piece->GetPiece();
     }
     v8::Array* castling_array = v8::Array::Cast(*args[2]);
     for (size_t i = 0; i < castling_array->Length(); ++i) {
       MaybeLocal<Value> rights = castling_array->Get(context, i);
-      CastlingRights* castling_rights = ObjectWrap::Unwrap<CastlingRights>(
+      CastlingRights* castling_rights = MyObjectWrap::Unwrap<CastlingRights>(
           rights.ToLocalChecked()->ToObject(context).ToLocalChecked());
       castling_map[castling_rights->GetPlayer()] = castling_rights->GetRights();
     }
@@ -278,7 +282,7 @@ std::string Board::ToStr() const {
 void Board::DebugString(const v8::FunctionCallbackInfo<v8::Value>& args) {
   Isolate* isolate = args.GetIsolate();
 
-  Board* obj = ObjectWrap::Unwrap<Board>(args.Holder());
+  Board* obj = MyObjectWrap::Unwrap<Board>(args.Holder());
 
   std::string s = obj->ToStr();
   MaybeLocal<String> local_s = String::NewFromUtf8(isolate, s.data());
@@ -316,6 +320,7 @@ void Player::New(const v8::FunctionCallbackInfo<v8::Value>& args) {
 
   if (args.IsConstructCall()) {
     Player* obj = new Player(isolate);
+    Local<External> external = External::New(isolate, obj);
     obj->Wrap(args.This());
     args.GetReturnValue().Set(args.This());
   } else {
@@ -334,14 +339,14 @@ void Player::MakeMove(const v8::FunctionCallbackInfo<v8::Value>& args) {
   Isolate* isolate = args.GetIsolate();
   Local<Context> context = isolate->GetCurrentContext();
 
-  Player* player_wrap = ObjectWrap::Unwrap<Player>(args.Holder());
+  Player* player_wrap = MyObjectWrap::Unwrap<Player>(args.Holder());
   chess::AlphaBetaPlayer& player = player_wrap->GetPlayer();
-  Board* board_wrap = ObjectWrap::Unwrap<Board>(
+  Board* board_wrap = MyObjectWrap::Unwrap<Board>(
       args[0]->ToObject(context).ToLocalChecked());
   chess::Board* board = board_wrap->GetBoard();
 
   int depth = args[1]->Int32Value(context).FromJust();
-  std::chrono::milliseconds time_limit(10'000);
+  //std::chrono::milliseconds time_limit(10'000);
   auto move_res = player.MakeMove(
       *board,
       //time_limit,
@@ -443,18 +448,15 @@ void Player::MakeMove(const v8::FunctionCallbackInfo<v8::Value>& args) {
 }
 
 void Player::CancelEvaluation(const v8::FunctionCallbackInfo<v8::Value>& args) {
-  Player* obj = ObjectWrap::Unwrap<Player>(args.Holder());
+  Player* obj = MyObjectWrap::Unwrap<Player>(args.Holder());
   obj->GetPlayer().CancelEvaluation();
 }
 
 Player::Player(v8::Isolate* isolate) {
   CancelAllEvaluations();
   AddToGlobalObjList(this);
-  node::AddEnvironmentCleanupHook(isolate, DeleteInstance, this);
-}
-
-Player::~Player() {
-  RemoveFromGlobalObjList(this);
+  // Register to delete the object.
+  node::AddEnvironmentCleanupHook(isolate, Player::DeleteInstance, this);
 }
 
 void Player::AddToGlobalObjList(Player* obj) {

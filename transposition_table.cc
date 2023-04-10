@@ -1,5 +1,6 @@
 #include <cassert>
 #include <optional>
+#include <iostream>
 
 #include "transposition_table.h"
 

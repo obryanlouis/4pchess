@@ -42,7 +42,8 @@ TEST(PlayerTest, EvaluateCheckmate) {
 
 TEST(PlayerTest, EvaluateCheckmateNextMove) {
   // Team is in checkmate next move
-  AlphaBetaPlayer player;
+  PlayerOptions options;
+  AlphaBetaPlayer player(options);
 
   std::unordered_map<BoardLocation, Piece> location_to_piece = {
     {BoardLocation(13, 8), Piece(kRedPlayer, KING)},
@@ -58,6 +59,7 @@ TEST(PlayerTest, EvaluateCheckmateNextMove) {
   float valuation = std::get<0>(res.value());
   const auto& move_or = std::get<1>(res.value());
   EXPECT_TRUE(move_or.has_value());
+  EXPECT_EQ(move_or.value(), Move(BoardLocation(1, 10), BoardLocation(1, 4)));
   EXPECT_EQ(valuation, kMateValue);
 }
 
@@ -154,7 +156,6 @@ TEST(PlayerTest, CheckPVInfoProducesValidMoves) {
 
 TEST(PlayerTest, StaticExchangeEvaluation) {
   PlayerOptions options;
-  options.enable_quiescence = true;
   AlphaBetaPlayer player(options);
 
   auto board = Board::CreateStandardSetup();
@@ -172,6 +173,25 @@ TEST(PlayerTest, StaticExchangeEvaluation) {
   int see = player.StaticExchangeEvaluationCapture(*board, move);
 
   EXPECT_LT(see, 0);
+}
+
+TEST(PlayerTest, Quiescence) {
+  PlayerOptions options;
+  options.enable_quiescence = true;
+  AlphaBetaPlayer player(options);
+
+  auto board = Board::CreateStandardSetup();
+
+  const auto& res = player.MakeMove(*board, std::nullopt, 1);
+  ASSERT_TRUE(res.has_value());
+  auto eval = std::get<0>(res.value());
+  auto move = std::get<1>(res.value());
+  ASSERT_TRUE(move.has_value());
+//  std::cout << "eval: " << eval << std::endl;
+//  std::cout << "best move: " << move.value() << std::endl;
+
+  EXPECT_GT(eval, -kMateValue);
+  EXPECT_LT(eval, kMateValue);
 }
 
 }  // namespace chess

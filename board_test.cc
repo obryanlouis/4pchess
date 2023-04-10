@@ -1476,6 +1476,23 @@ TEST(BoardTest, IsKingInCheck) {
   EXPECT_TRUE(board->IsKingInCheck(Player(YELLOW)));
 }
 
+TEST(BoardTest, IsKingInCheckFalse) {
+  auto board = Board::CreateStandardSetup();
+
+  EXPECT_FALSE(board->IsKingInCheck(Player(RED)));
+  EXPECT_FALSE(board->IsKingInCheck(Player(BLUE)));
+  EXPECT_FALSE(board->IsKingInCheck(Player(YELLOW)));
+  EXPECT_FALSE(board->IsKingInCheck(Player(GREEN)));
+
+  board->MakeMove(Move(BoardLocation(12, 7), BoardLocation(11, 7))); // h3
+
+  EXPECT_FALSE(board->IsKingInCheck(Player(RED)));
+  EXPECT_FALSE(board->IsKingInCheck(Player(BLUE)));
+  EXPECT_FALSE(board->IsKingInCheck(Player(YELLOW)));
+  EXPECT_FALSE(board->IsKingInCheck(Player(GREEN)));
+}
+
+
 }  // namespace chess
 
 

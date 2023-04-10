@@ -67,7 +67,6 @@ std::optional<int> AlphaBetaPlayer::QuiescenceSearch(
     int alpha,
     int beta,
     bool maximizing_player,
-    int moves_since_last_active,
     const std::optional<
         std::chrono::time_point<std::chrono::system_clock>>& deadline) {
   if (canceled_.load() || (deadline.has_value()
@@ -79,7 +78,7 @@ std::optional<int> AlphaBetaPlayer::QuiescenceSearch(
   num_nodes_++;
 
   int eval = Evaluate(board, maximizing_player);
-  if (depth <= 0 || moves_since_last_active >= 3) {
+  if (depth <= 0) {
     return eval;
   }
 
@@ -88,13 +87,11 @@ std::optional<int> AlphaBetaPlayer::QuiescenceSearch(
   bool checked = board.IsKingInCheck(player);
 
   if (!checked) {
-    int stand_pat = eval;
-
-    if (stand_pat >= beta) {
+    if (eval >= beta) {
       return beta;
     }
-    if (alpha < stand_pat) {
-      alpha = stand_pat;
+    if (alpha < eval) {
+      alpha = eval;
     }
   }
 
@@ -104,23 +101,20 @@ std::optional<int> AlphaBetaPlayer::QuiescenceSearch(
 
   int turn_i = static_cast<int>(player.GetColor());
   int curr_mob_score = player_mobility_scores_[turn_i];
-
   int num_moves_examined = 0;
-  bool has_legal_move = false;
 
   for (int i = pseudo_legal_moves.size() - 1;
-      i >= 0 && num_moves_examined < kMaxQuiescenceMoves;
-      i--) {
+      i >= 0 && num_moves_examined < kMaxQuiescenceMoves; i--) {
     const auto& move = pseudo_legal_moves[i];
-    bool delivers_check = board.DeliversCheck(move);
-    int active_capture = false;
-    if (move.GetStandardCapture() != nullptr) {
-      int see = StaticExchangeEvaluationCapture(board, move);
-      active_capture = see > 0;
-    }
+    bool active = checked
+               || board.DeliversCheck(move)
+               || (move.GetStandardCapture() != nullptr
+                   && StaticExchangeEvaluationCapture(board, move) > 0);
+
     board.MakeMove(move);
 
     if (board.CheckWasLastMoveKingCapture() != IN_PROGRESS) {
+      num_moves_examined++;
       board.UndoMove();
       if (options_.enable_mobility_evaluation) {
         player_mobility_scores_[turn_i] = curr_mob_score; // reset
@@ -135,14 +129,7 @@ std::optional<int> AlphaBetaPlayer::QuiescenceSearch(
       continue;
     }
 
-    has_legal_move = true;
-
-    bool active = delivers_check || active_capture;
-
-    // skip quiet moves after kMaxQuiescenceMoves
-    bool skip = num_moves_examined >= kMaxQuiescenceMoves && !active;
-
-    if (skip) {
+    if (!active) {
       board.UndoMove();
       continue;
     }
@@ -152,9 +139,8 @@ std::optional<int> AlphaBetaPlayer::QuiescenceSearch(
       player_mobility_scores_[turn_i] = player_mobility_score;
     }
 
-    int msla = 0;
     value_or = QuiescenceSearch(
-        board, depth - 1, -beta, -alpha, !maximizing_player, msla,
+        board, depth - 1, -beta, -alpha, !maximizing_player,
         deadline);
 
     board.UndoMove();
@@ -182,19 +168,6 @@ std::optional<int> AlphaBetaPlayer::QuiescenceSearch(
     player_mobility_scores_[turn_i] = curr_mob_score; // reset
   }
 
-  if (!has_legal_move) {
-    // no legal moves
-    if (!checked) {
-      return 0;  // stalemate
-    }
-
-    return -kMateValue;  // checkmate
-  }
-
-  if (num_moves_examined == 0) {
-    return eval;
-  }
-
   return alpha;
 }
 
@@ -207,6 +180,7 @@ std::optional<int> AlphaBetaPlayer::QuiescenceSearch(
 // before finishing search and the results should not be used.
 std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
     Stack* ss,
+    NodeType node_type,
     Board& board,
     int ply,
     int depth,
@@ -226,8 +200,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
   //int alpha_orig = alpha;
   bool is_root_node = ply == 1;
 
-  std::optional<Move> pv_move = pvinfo.GetBestMove();
-  bool is_pv_node = pv_move.has_value();
+  bool is_pv_node = node_type != NonPV;
 
   std::optional<Move> tt_move;
   if (options_.enable_transposition_table) {
@@ -264,7 +237,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
     if (options_.enable_quiescence) {
 
       auto value_or = QuiescenceSearch(
-          board, kMaxQuiescenceDepth, alpha, beta, maximizing_player, 0, deadline);
+          board, kMaxQuiescenceDepth, alpha, beta, maximizing_player, deadline);
       if (!value_or.has_value()) {
         return std::nullopt; // timeout
       }
@@ -306,7 +279,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
     PVInfo null_pvinfo;
     int r = std::min(depth / 3 + 1, depth - 1);
     auto value_and_move_or = Search(
-        ss+1, board, ply + 1, depth - r - 1,
+        ss+1, NonPV, board, ply + 1, depth - r - 1,
         -beta, -beta + 1, !maximizing_player, expanded, deadline, null_pvinfo,
         null_moves + 1);
 
@@ -326,6 +299,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
   }
 
   std::vector<Move> pseudo_legal_moves;
+  std::optional<Move> pv_move = pvinfo.GetBestMove();
   pseudo_legal_moves = MoveOrder(
       board, maximizing_player, pv_move.has_value() ? pv_move : tt_move,
       ss->killers);
@@ -357,12 +331,12 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
 //    }
 //  }
 
-  bool b_search_pv = true;
-  std::optional<std::tuple<int, std::optional<Move>>> value_and_move_or;
+  //bool b_search_pv = true;
 
   bool has_legal_moves = false;
   int move_count = 0;
   for (int i = pseudo_legal_moves.size() - 1; i >= 0; i--) {
+    std::optional<std::tuple<int, std::optional<Move>>> value_and_move_or;
     const auto& move = pseudo_legal_moves[i];
 //    const auto* piece = board.GetPiece(move.From());
 
@@ -404,6 +378,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       continue;
     }
 
+    move_count++;
     has_legal_moves = true;
 
     if (options_.enable_mobility_evaluation) {
@@ -490,7 +465,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       int r = Reduction(depth, move_count + 1);
       r = std::clamp(r, 0, depth - 2);
       value_and_move_or = Search(
-          ss+1, board, ply + 1, depth - 1 - r + e,
+          ss+1, NonPV, board, ply + 1, depth - 1 - r + e,
           -alpha-1, -alpha, !maximizing_player, expanded + e,
           deadline, *child_pvinfo, null_moves);
       if (value_and_move_or.has_value()) {
@@ -498,42 +473,33 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
         if (score > alpha) {  // re-search
           num_lmr_researches_++;
           value_and_move_or = Search(
-              ss+1, board, ply + 1, depth - 1 + e,
+              ss+1, NonPV, board, ply + 1, depth - 1 + e,
               -beta, -alpha, !maximizing_player, expanded + e,
               deadline, *child_pvinfo, null_moves);
         }
       }
 
-    } else {
+    } else if (!is_pv_node || move_count > 1) {
+      value_and_move_or = Search(
+          ss+1, NonPV, board, ply + 1, depth - 1 + e,
+          -alpha-1, -alpha, !maximizing_player, expanded + e,
+          deadline, *child_pvinfo, null_moves);
+    }
 
-      // pvs search
-      if (!options_.pvs || (b_search_pv && is_pv_node)) {
+    // For PV nodes only, do a full PV search on the first move or after a fail
+    // high (in the latter case search only if value < beta), otherwise let the
+    // parent node fail low with value <= alpha and try another move.
+    if (is_pv_node && (move_count == 1 || (value_and_move_or.has_value() && (
+            -std::get<0>(value_and_move_or.value()) > alpha
+            && (is_root_node
+              || -std::get<0>(value_and_move_or.value()) < beta))))) {
         value_and_move_or = Search(
-            ss+1, board, ply + 1, depth - 1 + e,
+            ss+1, PV, board, ply + 1, depth - 1 + e,
             -beta, -alpha, !maximizing_player, expanded + e,
             deadline, *child_pvinfo, null_moves);
-
-      } else {
-        value_and_move_or = Search(
-            ss+1, board, ply + 1, depth - 1 + e,
-            -alpha-1, -alpha, !maximizing_player, expanded + e,
-            deadline, *child_pvinfo, null_moves);
-        if (value_and_move_or.has_value()) {
-          int score = -std::get<0>(value_and_move_or.value());
-          if (score > alpha && (score < beta || is_root_node)) {  // re-search
-            value_and_move_or = Search(
-                ss+1, board, ply + 1, depth - 1 + e,
-                -beta, -alpha, !maximizing_player, expanded + e,
-                deadline, *child_pvinfo, null_moves);
-          }
-        }
-
-      }
-
     }
 
     board.UndoMove();
-    move_count++;
 
     if (options_.enable_mobility_evaluation) { // reset
       player_mobility_scores_[player_color] = curr_mob_score;
@@ -570,7 +536,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       best_move = move;
       pvinfo.SetChild(child_pvinfo);
       pvinfo.SetBestMove(move);
-      b_search_pv = false;
+      //b_search_pv = false;
     }
     if (!best_move.has_value()) {
       best_move = move;
@@ -658,7 +624,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::MTDF(
         || std::chrono::system_clock::now() < deadline.value())) {
     int b = std::max(g, lower_bound + 1);
     move_and_value = Search(
-        stack, board, 1, depth, b - 1, b, maximizing_player, 0,
+        stack, Root, board, 1, depth, b - 1, b, maximizing_player, 0,
         deadline, pv_info_);
     if (!move_and_value.has_value()) {
       return std::nullopt;
@@ -728,7 +694,7 @@ std::optional<std::tuple<int, std::optional<Move>, int>> AlphaBetaPlayer::MakeMo
       move_and_value = MTDF(board, deadline, next_depth, f);
     } else {
       move_and_value = Search(
-          stack, board, 1, next_depth, alpha, beta, maximizing_player, 0,
+          stack, Root, board, 1, next_depth, alpha, beta, maximizing_player, 0,
           deadline, pv_info_);
     }
 

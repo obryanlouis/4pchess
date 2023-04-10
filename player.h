@@ -64,6 +64,12 @@ struct Stack {
   Move killers[2];
 };
 
+enum NodeType {
+  NonPV,
+  PV,
+  Root,
+};
+
 class AlphaBetaPlayer {
  public:
   AlphaBetaPlayer(std::optional<PlayerOptions> options = std::nullopt);
@@ -83,6 +89,7 @@ class AlphaBetaPlayer {
 
   std::optional<std::tuple<int, std::optional<Move>>> Search(
       Stack* ss,
+      NodeType node_type,
       Board& board,
       int ply,
       int depth,
@@ -106,7 +113,6 @@ class AlphaBetaPlayer {
       int alpha,
       int beta,
       bool maximizing_player,
-      int moves_since_last_active,
       const std::optional<
           std::chrono::time_point<std::chrono::system_clock>>& deadline);
 

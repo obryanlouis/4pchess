@@ -1265,9 +1265,11 @@ Board::Board(
   std::srand(958829);
   for (int color = 0; color < 4; color++) {
     turn_hashes_[color] = rand64();
+  }
+  for (int piece_type = 0; piece_type < 6; piece_type++) {
     for (int row = 0; row < 14; row++) {
       for (int col = 0; col < 14; col++) {
-        piece_hashes_[color][row][col] = rand64();
+        piece_hashes_[piece_type][row][col] = rand64();
       }
     }
   }
