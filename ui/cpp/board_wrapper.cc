@@ -346,12 +346,14 @@ void Player::MakeMove(const v8::FunctionCallbackInfo<v8::Value>& args) {
   chess::Board* board = board_wrap->GetBoard();
 
   int depth = args[1]->Int32Value(context).FromJust();
+  // by default, there's no time limit
+  std::optional<std::chrono::milliseconds> time_limit;
+  auto secs = args[2]->Int32Value(context);
+  if (args[1]->IsInt32() && !secs.IsNothing() && secs.FromJust() > 0) {
+    time_limit = std::chrono::milliseconds(1000 * secs.FromJust());
+  }
   //std::chrono::milliseconds time_limit(10'000);
-  auto move_res = player.MakeMove(
-      *board,
-      //time_limit,
-      /*time_limit=*/std::nullopt,
-      depth);
+  auto move_res = player.MakeMove(*board, time_limit, depth);
 
   if (move_res.has_value()) {
     // Return format:

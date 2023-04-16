@@ -11,11 +11,16 @@ var board_key_to_eval = {};
 const player_id_to_color = {0: 'red', 1: 'blue', 2: 'yellow', 3: 'green'};
 var request_interval = null;
 var max_search_depth = null;
+var secs_per_move = null;
 
 if (window.localStorage != null) {
   var max_depth = parseInt(window.localStorage['max_search_depth']);
   if (max_depth != null && !isNaN(max_depth)) {
     max_search_depth = max_depth;
+  }
+  var secs = parseInt(window.localStorage['secs_per_move']);
+  if (secs != null && !isNaN(secs)) {
+    secs_per_move = secs;
   }
 }
 
@@ -75,12 +80,25 @@ $(document).ready(function() {
   }
   $('#max_depth').change(function() {
     var max_depth = parseInt($(this).val());
-    if (max_depth == null || isNaN(max_depth)) {
+    if (max_depth == null || isNaN(max_depth) || max_depth < 0) {
       max_search_depth = null;
     } else {
       max_search_depth = max_depth;
     }
     window.localStorage['max_search_depth'] = max_search_depth;
+  });
+
+  if (secs_per_move != null) {
+    $('#secs_per_move').val(secs_per_move);
+  }
+  $('#secs_per_move').change(function() {
+    var secs = parseInt($(this).val());
+    if (secs == null || isNaN(secs) || secs < 0) {
+      secs_per_move = null;
+    } else {
+      secs_per_move = secs;
+    }
+    window.localStorage['secs_per_move'] = secs_per_move;
   });
 })
 
@@ -606,10 +624,12 @@ function requestBoardEvaluation() {
 
     var eval_results = board_key_to_eval[req_key];
 
-//    var search_depth = 10;
-
     var search_depth = 1;
-    if (eval_results != null && 'search_depth' in eval_results) {
+    if (secs_per_move != null && max_search_depth != null) {
+      // TODO: Keep requesting depth incrementally but cache the C++ AlphaBetaPlayer.
+      // This requires trickier logic in routes/index.js and routes/eval_board.js.
+      search_depth = max_search_depth;
+    } else if (eval_results != null && 'search_depth' in eval_results) {
       search_depth = eval_results['search_depth'] + 1;
     }
 
@@ -617,6 +637,9 @@ function requestBoardEvaluation() {
     var req_body = {
       'board_state': board_state,
       'search_depth': search_depth,
+    }
+    if (secs_per_move != null) {
+      req_body['secs_per_move'] = secs_per_move;
     }
     var req_text = JSON.stringify(req_body);
     // create a new request

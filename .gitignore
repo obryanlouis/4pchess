@@ -21,3 +21,4 @@ ui/bin
 ui/bin/*
 
 todo.txt
+nohup*

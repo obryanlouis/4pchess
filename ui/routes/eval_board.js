@@ -62,9 +62,10 @@ parentPort.on('message', message => {
 var req_json = workerData;
 var board = parseBoard(req_json);
 var depth = req_json['search_depth'];
+var secs = req_json['secs_per_move'];
 if (!Number.isInteger(depth)) {
   throw new Error('invalid search depth: ' + depth);
 }
 
-result = player.makeMove(board, depth);
+result = player.makeMove(board, depth, secs);
 parentPort.postMessage(result);

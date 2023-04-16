@@ -14,7 +14,10 @@ TEST(Speed, BoardTest) {
   auto start = std::chrono::system_clock::now();
   auto board = Board::CreateStandardSetup();
   PlayerOptions options;
-  options.enable_killers = true;
+  options.enable_king_safety = false;
+  options.test = false;
+  options.enable_singular_extensions = false;
+  options.enable_late_move_pruning = false;
   AlphaBetaPlayer player(options);
   player.EnableDebug(true);
 
@@ -28,6 +31,15 @@ TEST(Speed, BoardTest) {
   int nps = (int) ((((float)player.GetNumEvaluations()) / duration.count())*1000.0);
   std::cout << "Nodes/sec: " << nps << std::endl;
   std::cout << "Nodes: " << player.GetNumEvaluations() << std::endl;
+  if (options.enable_late_move_pruning) {
+    std::cout << "#LM pruned: " << player.GetNumLateMovesPruned() << std::endl;
+  }
+  if (options.enable_singular_extensions) {
+    std::cout << "#Singular searches: " << player.GetNumSingularExtensionSearches()
+      << std::endl;
+    std::cout << "#Singular extensions: " << player.GetNumSingularExtensions()
+      << std::endl;
+  }
   if (options.enable_transposition_table) {
     std::cout << "#Cache hits: " << player.GetNumCacheHits() << std::endl;
     float cache_hit_rate = (float)player.GetNumCacheHits() /

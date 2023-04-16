@@ -18,6 +18,7 @@ struct HashTableEntry {
   std::optional<Move> move;
   int score;
   ScoreBound bound;
+  bool is_pv;
 };
 
 class TranspositionTable {
@@ -26,7 +27,7 @@ class TranspositionTable {
 
    const HashTableEntry* Get(int64_t key);
    void Save(int64_t key, int depth, std::optional<Move> move,
-             int score, ScoreBound bound);
+             int score, ScoreBound bound, bool is_pv);
 
   ~TranspositionTable() {
     if (hash_table_ != nullptr) {

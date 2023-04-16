@@ -13,6 +13,8 @@
 
 namespace chess {
 
+constexpr int kNumPieceTypes = 6;
+
 enum PieceType {
   UNINITIALIZED_PIECE = -1,
   PAWN = 0, KNIGHT = 1, BISHOP = 2, ROOK = 3, QUEEN = 4, KING = 5,
@@ -116,8 +118,8 @@ class BoardLocation {
   std::string PrettyStr() const;
 
  private:
-  int row_;
-  int col_;
+  int row_ = 0;
+  int col_ = 0;
 };
 
 }  // namespace chess
@@ -448,6 +450,21 @@ class Board {
   void MakeNullMove();
   void UndoNullMove();
 
+  bool IsLegalLocation(int row, int col) const {
+    if (row < 0
+        || row > GetMaxRow()
+        || col < 0
+        || col > GetMaxCol()
+        || (row < 3 && (col < 3 || col > 10))
+        || (row > 10 && (col < 3 || col > 10))) {
+      return false;
+    }
+    return true;
+  }
+  bool IsLegalLocation(const BoardLocation& location) const {
+    return IsLegalLocation(location.GetRow(), location.GetCol());
+  }
+
  private:
 
   void AddMovesFromIncrMovement(
@@ -458,10 +475,8 @@ class Board {
       int incr_col,
       const std::optional<CastlingRights>& initial_castling_rights = std::nullopt,
       const std::optional<CastlingRights>& castling_rights = std::nullopt) const;
-  inline int GetMaxRow() const;
-  inline int GetMaxCol() const;
-  inline bool IsLegalLocation(int i, int j) const;
-  inline bool IsLegalLocation(const BoardLocation& location) const;
+  int GetMaxRow() const { return 13; }
+  int GetMaxCol() const { return 13; }
   std::optional<CastlingType> GetRookLocationType(
       const Player& player, const BoardLocation& location) const;
   inline void SetPiece(const BoardLocation& location,
@@ -513,6 +528,7 @@ class Board {
   int64_t hash_key_ = 0;
   int64_t piece_hashes_[6][14][14];
   int64_t turn_hashes_[4];
+  BoardLocation king_locations_[4];
 
 };
 

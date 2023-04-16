@@ -33,8 +33,6 @@ router.post('/chess-api', async function(req, res, next) {
         worker.on('error', reject);
         worker.on('exit', (code) => {
           resolve(null);
-//          if (code !== 0)
-//            reject(new Error(`Worker stopped with exit code ${code}`));
         });
 
       });

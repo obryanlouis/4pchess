@@ -96,6 +96,8 @@ const Piece* kPieceSet[4][6] = {
   },
 };
 
+const BoardLocation kNoLocation;
+
 
 
 namespace {
@@ -945,6 +947,10 @@ void Board::SetPiece(
   // Add to piece_list_
   piece_list_[piece.GetColor()].emplace_back(location, &piece);
   UpdatePieceHash(piece, location);
+  // Update king location
+  if (piece.GetPieceType() == KING) {
+    king_locations_[piece.GetColor()] = location;
+  }
 }
 
 void Board::RemovePiece(const BoardLocation& location) {
@@ -960,6 +966,10 @@ void Board::RemovePiece(const BoardLocation& location) {
       break;
     }
     ++it;
+  }
+  // Update king location
+  if (piece->GetPieceType() == KING) {
+    king_locations_[piece->GetColor()] = kNoLocation;
   }
 }
 
@@ -994,6 +1004,7 @@ void Board::MakeMove(const Move& move) {
     }
   }
 
+  RemovePiece(move.From());
   const auto& promotion_piece_type = move.GetPromotionPieceType();
   if (promotion_piece_type.has_value()) { // Promotion
     SetPiece(
@@ -1012,7 +1023,6 @@ void Board::MakeMove(const Move& move) {
     assert(piece != nullptr);
     SetPiece(move.To(), *piece);
   }
-  RemovePiece(move.From());
 
   // En-passant
   const auto& enpassant_location = move.GetEnpassantLocation();
@@ -1022,8 +1032,9 @@ void Board::MakeMove(const Move& move) {
     // Castling
     const auto& rook_move = move.GetRookMove();
     if (rook_move.has_value()) {
-      SetPiece(rook_move->To(), *GetPiece(rook_move->From()));
+      const auto* rook = GetPiece(rook_move->From());
       RemovePiece(rook_move->From());
+      SetPiece(rook_move->To(), *rook);
     }
 
     // Castling: rights update
@@ -1057,14 +1068,15 @@ void Board::UndoMove() {
   const BoardLocation& from = move.From();
 
   // Move the piece back.
+  const auto* piece = GetPiece(to);
+  RemovePiece(to);
   const auto& promotion_piece_type = move.GetPromotionPieceType();
   if (promotion_piece_type.has_value()) {
     // Handle promotions
     SetPiece(from, *kPieceSet[turn_before.GetColor()][PAWN]);
   } else {
-    SetPiece(from, *GetPiece(to));
+    SetPiece(from, *piece);
   }
-  RemovePiece(to);
 
   // Place back captured pieces
   const auto* standard_capture = move.GetStandardCapture();
@@ -1087,9 +1099,9 @@ void Board::UndoMove() {
     // Castling: rook move
     const auto& rook_move = move.GetRookMove();
     if (rook_move.has_value()) {
+      RemovePiece(rook_move->To());
       SetPiece(rook_move->From(),
                *kPieceSet[turn_before.GetColor()][ROOK]);
-      RemovePiece(rook_move->To());
     }
 
     // Castling: rights update
@@ -1108,44 +1120,40 @@ void Board::UndoMove() {
 }
 
 std::optional<BoardLocation> Board::GetKingLocation(const Player& turn) const {
-  // NOTE: This can be faster by keeping track of the king location
-  for (const auto& x : piece_list_[turn.GetColor()]) {
-    if (x.GetPiece()->GetColor() == turn.GetColor()
-        && x.GetPiece()->GetPieceType() == KING) {
-      return x.GetLocation();
-    }
+  const BoardLocation& location = king_locations_[turn.GetColor()];
+  if (location == kNoLocation) {
+    return std::nullopt;
   }
-
-  return std::nullopt;
+  return location;
 }
 
 Team Board::TeamToPlay() const {
   return GetTeam(GetTurn().GetColor());
 }
 
-int Board::GetMaxRow() const {
-  return 13;
-}
+//int Board::GetMaxRow() const {
+//  return 13;
+//}
+//
+//int Board::GetMaxCol() const {
+//  return 13;
+//}
 
-int Board::GetMaxCol() const {
-  return 13;
-}
-
-bool Board::IsLegalLocation(int row, int col) const {
-  if (row < 0
-      || row > GetMaxRow()
-      || col < 0
-      || col > GetMaxCol()
-      || (row < 3 && (col < 3 || col > 10))
-      || (row > 10 && (col < 3 || col > 10))) {
-    return false;
-  }
-  return true;
-}
-
-bool Board::IsLegalLocation(const BoardLocation& location) const {
-  return IsLegalLocation(location.GetRow(), location.GetCol());
-}
+//bool Board::IsLegalLocation(int row, int col) const {
+//  if (row < 0
+//      || row > GetMaxRow()
+//      || col < 0
+//      || col > GetMaxCol()
+//      || (row < 3 && (col < 3 || col > 10))
+//      || (row > 10 && (col < 3 || col > 10))) {
+//    return false;
+//  }
+//  return true;
+//}
+//
+//bool Board::IsLegalLocation(const BoardLocation& location) const {
+//  return IsLegalLocation(location.GetRow(), location.GetCol());
+//}
 
 int Board::PieceEvaluation() const {
   return piece_evaluation_;
@@ -1200,7 +1208,7 @@ Board::Board(
     {
 
   // In centipawns
-  piece_evaluations_[PAWN] = 100;
+  piece_evaluations_[PAWN] = 50;
   piece_evaluations_[KNIGHT] = 300;
   piece_evaluations_[BISHOP] = 400;
   piece_evaluations_[ROOK] = 500;
@@ -1227,7 +1235,8 @@ Board::Board(
   for (const auto& it : location_to_piece) {
     const auto& location = it.first;
     const auto& piece_ref = it.second;
-    const auto* piece = kPieceSet[piece_ref.GetColor()][piece_ref.GetPieceType()];
+    PlayerColor color = piece_ref.GetColor();
+    const auto* piece = kPieceSet[color][piece_ref.GetPieceType()];
     location_to_piece_[location.GetRow()][location.GetCol()] = piece;
     piece_list_[piece->GetColor()].push_back(PlacedPiece(
           locations_[location.GetRow()][location.GetCol()],
@@ -1237,6 +1246,9 @@ Board::Board(
       piece_evaluation_ += piece_evaluations_[static_cast<int>(piece_type)];
     } else {
       piece_evaluation_ -= piece_evaluations_[static_cast<int>(piece_type)];
+    }
+    if (piece->GetPieceType() == KING) {
+      king_locations_[color] = location;
     }
   }
 

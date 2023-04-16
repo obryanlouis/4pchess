@@ -16,15 +16,15 @@
 namespace chess {
 
 // TODO: move these constants to a separate header file
-constexpr int kMaxQuiescenceDepth = 8;
-constexpr int kMaxQuiescenceMoves = 3;
+constexpr int kMaxQuiescenceDepth = 4;
+constexpr int kMaxQuiescenceMoves = 2;
 constexpr int kMateValue = 1000000'00;  // mate value (centipawns)
 
 AlphaBetaPlayer::AlphaBetaPlayer(std::optional<PlayerOptions> options) {
   if (options.has_value()) {
     options_ = options.value();
   }
-  piece_evaluations_[PAWN] = 100;
+  piece_evaluations_[PAWN] = 50;
   piece_evaluations_[KNIGHT] = 300;
   piece_evaluations_[BISHOP] = 400;
   piece_evaluations_[ROOK] = 500;
@@ -54,6 +54,52 @@ AlphaBetaPlayer::AlphaBetaPlayer(std::optional<PlayerOptions> options) {
   if (options_.enable_history_leaf_pruning) {
     ResetHistoryCounters();
   }
+
+  for (int row = 0; row < 14; row++) {
+    for (int col = 0; col < 14; col++) {
+      if (row <= 2 || row >= 11 || col <= 2 || col >= 11) {
+        location_evaluations_[row][col] = 5;
+      } else if (row <= 4 || row >= 9 || col <= 4 || col >= 9) {
+        location_evaluations_[row][col] = 10;
+      } else {
+        location_evaluations_[row][col] = 15;
+      }
+    }
+  }
+
+  king_attack_weight_[0] = 0;
+  king_attack_weight_[1] = 0;
+  king_attack_weight_[2] = 50;
+  king_attack_weight_[3] = 75;
+  king_attack_weight_[4] = 88;
+  king_attack_weight_[5] = 94;
+  king_attack_weight_[6] = 97;
+  king_attack_weight_[7] = 99;
+  for (int i = 8; i < 30; i++) {
+    king_attack_weight_[i] = 100;
+  }
+
+  late_move_pruning_[0] = 0;
+  late_move_pruning_[1] = 2;
+  late_move_pruning_[2] = 2;
+  late_move_pruning_[3] = 3;
+  late_move_pruning_[4] = 3;
+  late_move_pruning_[5] = 5;
+  late_move_pruning_[6] = 5;
+  late_move_pruning_[7] = 6;
+  late_move_pruning_[8] = 6;
+  late_move_pruning_[9] = 7;
+  late_move_pruning_[10] = 7;
+  late_move_pruning_[11] = 8;
+  late_move_pruning_[12] = 8;
+  late_move_pruning_[13] = 9;
+  late_move_pruning_[14] = 9;
+  late_move_pruning_[15] = 10;
+  late_move_pruning_[16] = 10;
+  late_move_pruning_[17] = 10;
+  late_move_pruning_[18] = 10;
+  late_move_pruning_[19] = 10;
+
 }
 
 int AlphaBetaPlayer::Reduction(int depth, int move_number) const {
@@ -68,7 +114,8 @@ std::optional<int> AlphaBetaPlayer::QuiescenceSearch(
     int beta,
     bool maximizing_player,
     const std::optional<
-        std::chrono::time_point<std::chrono::system_clock>>& deadline) {
+        std::chrono::time_point<std::chrono::system_clock>>& deadline,
+    int msla) {
   if (canceled_.load() || (deadline.has_value()
         && std::chrono::system_clock::now() >= deadline.value())) {
     // hit deadline
@@ -76,15 +123,17 @@ std::optional<int> AlphaBetaPlayer::QuiescenceSearch(
   }
 
   num_nodes_++;
+  num_quiescence_nodes_++;
 
   int eval = Evaluate(board, maximizing_player);
-  if (depth <= 0) {
+  if (depth <= 0 || msla >= 4) {
     return eval;
   }
 
   std::optional<int> value_or;
   Player player = board.GetTurn();
-  bool checked = board.IsKingInCheck(player);
+
+  bool checked = board.IsKingInCheck(player.GetTeam());
 
   if (!checked) {
     if (eval >= beta) {
@@ -97,7 +146,7 @@ std::optional<int> AlphaBetaPlayer::QuiescenceSearch(
 
   // TODO: use a pv move here, maybe
   std::vector<Move> pseudo_legal_moves = MoveOrder(
-      board, maximizing_player, std::nullopt);
+      board, maximizing_player, std::nullopt, nullptr, true);
 
   int turn_i = static_cast<int>(player.GetColor());
   int curr_mob_score = player_mobility_scores_[turn_i];
@@ -109,7 +158,11 @@ std::optional<int> AlphaBetaPlayer::QuiescenceSearch(
     bool active = checked
                || board.DeliversCheck(move)
                || (move.GetStandardCapture() != nullptr
-                   && StaticExchangeEvaluationCapture(board, move) > 0);
+                   // approx SEE >= 0
+//                   && piece_evaluations_[board.GetPiece(move.From())->GetPieceType()]
+//                      < piece_evaluations_[board.GetPiece(move.To())->GetPieceType()])
+                   && StaticExchangeEvaluationCapture(board, move) > 0)
+               ;
 
     board.MakeMove(move);
 
@@ -135,13 +188,14 @@ std::optional<int> AlphaBetaPlayer::QuiescenceSearch(
     }
 
     if (options_.enable_mobility_evaluation) {
+      //int player_mobility_score = MobilityEvaluation(board, player);
       int player_mobility_score = board.MobilityEvaluation(player);
       player_mobility_scores_[turn_i] = player_mobility_score;
     }
 
     value_or = QuiescenceSearch(
         board, depth - 1, -beta, -alpha, !maximizing_player,
-        deadline);
+        deadline, 0);
 
     board.UndoMove();
 
@@ -167,6 +221,22 @@ std::optional<int> AlphaBetaPlayer::QuiescenceSearch(
   if (options_.enable_mobility_evaluation) {
     player_mobility_scores_[turn_i] = curr_mob_score; // reset
   }
+
+//  if (num_moves_examined == 0) {
+//    // if there were no captures to try, force a null move
+//    board.MakeNullMove();
+//
+//    value_or = QuiescenceSearch(board, depth - 1, -beta, -alpha,
+//        !maximizing_player, deadline, msla + 1);
+//
+//    board.UndoNullMove();
+//
+//    if (!value_or.has_value()) {
+//      return std::nullopt; // timeout
+//    }
+//    int score = -value_or.value();
+//    alpha = std::max(alpha, score);
+//  }
 
   return alpha;
 }
@@ -201,41 +271,48 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
   bool is_root_node = ply == 1;
 
   bool is_pv_node = node_type != NonPV;
+  bool is_tt_pv = false;
 
   std::optional<Move> tt_move;
+  const HashTableEntry* tte = nullptr;
   if (options_.enable_transposition_table) {
     int64_t key = board.HashKey();
-    auto* entry = transposition_table_->Get(key);
-    if (entry != nullptr && entry->key == key) { // valid entry
-      if (entry->depth >= depth) {
+    tte = transposition_table_->Get(key);
+    if (tte != nullptr && tte->key == key) { // valid entry
+      if (tte->depth >= depth) {
         num_cache_hits_++;
         // at non-PV nodes check for an early TT cutoff
         if (!is_root_node
             && !is_pv_node
-            && (entry->bound == EXACT
-              || (entry->bound == LOWER_BOUND && entry->score >= beta)
-              || (entry->bound == UPPER_BOUND && entry->score <= alpha))
+            && (tte->bound == EXACT
+              || (tte->bound == LOWER_BOUND && tte->score >= beta)
+              || (tte->bound == UPPER_BOUND && tte->score <= alpha))
            ) {
 
-          if (entry->move.has_value()
-              && !entry->move->IsCapture()) {
-            UpdateQuietStats(ss, entry->move.value());
+          if (tte->move.has_value()
+              && !tte->move->IsCapture()) {
+            UpdateQuietStats(ss, tte->move.value());
           }
 
           return std::make_tuple(
-              std::min(beta, std::max(alpha, entry->score)), entry->move);
+              std::min(beta, std::max(alpha, tte->score)), tte->move);
         }
       }
-      tt_move = entry->move;
+      tt_move = tte->move;
+      is_tt_pv = tte->is_pv;
     }
   }
 
   int eval = Evaluate(board, maximizing_player);
 
+  Player player = board.GetTurn();
+  //Team team = player.GetTeam();
+
   if (depth <= 0 || ply >= kMaxPly) {
 
     if (options_.enable_quiescence) {
 
+      num_nodes_--; // added in the next call
       auto value_or = QuiescenceSearch(
           board, kMaxQuiescenceDepth, alpha, beta, maximizing_player, deadline);
       if (!value_or.has_value()) {
@@ -245,31 +322,50 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
     }
 
     if (options_.enable_transposition_table) {
-      transposition_table_->Save(board.HashKey(), 0, std::nullopt, eval, EXACT);
+      transposition_table_->Save(board.HashKey(), 0, std::nullopt, eval, EXACT, is_pv_node);
     }
 
     return std::make_tuple(eval, std::nullopt);
   }
 
-  Player player = board.GetTurn();
+  if (!ss->excluded_move.has_value()) {
+    ss->tt_pv = is_pv_node || (tte != nullptr && tte->is_pv);
+  }
+  (ss+1)->excluded_move = std::nullopt;
+  (ss+2)->killers[0] = (ss+2)->killers[1] = Move();
 
-//  // futility pruning
-//  if (options_.enable_futility_pruning
-//      && !is_pv_node // not a pv node
-//      && ply > 1 // not root
-//      && ply < 9 // important for mate finding
-//      && eval >= beta + 150 * depth
-//      ) {
-//    num_futility_moves_pruned_++;
-//    return std::make_pair(beta, std::nullopt);
-//  }
+
+  // futility pruning
+  if (options_.enable_futility_pruning
+      && !is_pv_node // not a pv node
+      && !is_tt_pv // not TT pv
+      && !is_root_node // not root
+      && depth < 2 // important for mate finding
+      && eval >= beta + 500 * depth
+      ) {
+    num_futility_moves_pruned_++;
+    return std::make_pair(beta, std::nullopt);
+  }
+
+  bool in_check = false;
+  if ((options_.enable_null_move_pruning
+      && !is_root_node // not root
+      && !ss->excluded_move.has_value()
+      && !is_pv_node // not a pv node
+      && null_moves == 0 // last move wasn't null
+      && eval >= beta)
+      || options_.enable_late_move_pruning) {
+    in_check = board.IsKingInCheck(player);
+  }
 
   // null move pruning
   if (options_.enable_null_move_pruning
       && !is_root_node // not root
+      && !ss->excluded_move.has_value()
       && !is_pv_node // not a pv node
       && null_moves == 0 // last move wasn't null
-      && !board.IsKingInCheck(player) // not in check
+      //&& !board.IsKingInCheck(player) // not in check
+      && !in_check // not in check
       && eval >= beta
       ) {
     num_null_moves_tried_++;
@@ -291,7 +387,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       num_null_moves_pruned_++;
 
       if (options_.enable_transposition_table) {
-        transposition_table_->Save(board.HashKey(), depth, std::nullopt, beta, LOWER_BOUND);
+        transposition_table_->Save(board.HashKey(), depth, std::nullopt, beta, LOWER_BOUND, is_pv_node);
       }
 
       return std::make_tuple(beta, std::nullopt);
@@ -304,41 +400,19 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       board, maximizing_player, pv_move.has_value() ? pv_move : tt_move,
       ss->killers);
 
-  //int value = -kMateValue;
   std::optional<Move> best_move;
   int player_color = static_cast<int>(player.GetColor());
   int curr_mob_score = player_mobility_scores_[player_color];
 
-//  if (options_.enable_extensions) {
-//    // mate threat extension
-//    if (null_moves == 0
-//        && depth <= 1
-//        && expanded <= 0) {
-//      // check if the current player would be mated after a null move
-//      // (blocks checkmates)
-//      int mate_beta = kMateValue/2;
-//      board.MakeNullMove();
-//      PVInfo null_pvinfo;
-//      auto zw_value_or = Search(
-//          board, ply + 1, 4, mate_beta - 1, mate_beta,
-//          !maximizing_player, expanded+4, deadline, null_pvinfo,
-//          null_moves + 1);
-//      board.UndoNullMove();
-//      if (zw_value_or.has_value()
-//          && mate_beta < std::get<0>(zw_value_or.value())) { // extend
-//        extension = std::max(extension, 4);
-//      }
-//    }
-//  }
-
-  //bool b_search_pv = true;
-
   bool has_legal_moves = false;
   int move_count = 0;
+  int quiets = 0;
   for (int i = pseudo_legal_moves.size() - 1; i >= 0; i--) {
     std::optional<std::tuple<int, std::optional<Move>>> value_and_move_or;
     const auto& move = pseudo_legal_moves[i];
-//    const auto* piece = board.GetPiece(move.From());
+    if (move == ss->excluded_move) {
+      continue;
+    }
 
     bool delivers_check = false;
     bool lmr_cond1 =
@@ -348,18 +422,21 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       && move_count > 2
       && !move.IsCapture()
       ;
-    if (lmr_cond1) {
+    if (lmr_cond1 || options_.enable_late_move_pruning) {
       // this has to be called before the move is made
       delivers_check = board.DeliversCheck(move);
     }
 
-//    bool positive_see = false;
-//    if (options_.enable_quiescence
-//        && move.GetStandardCapture() != nullptr
-//        && depth < 4) {
-//      int see = StaticExchangeEvaluationCapture(board, move);
-//      positive_see = see > 0;
-//    }
+    bool quiet = !in_check && !move.IsCapture() && !delivers_check;
+
+    if (options_.enable_late_move_pruning
+        && ply > 4
+        && quiet
+        && depth <= 14
+        && quiets >= late_move_pruning_[depth]) {
+      num_lm_pruned_++;
+      continue;
+    }
 
     board.MakeMove(move);
 
@@ -378,10 +455,30 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       continue;
     }
 
-    move_count++;
     has_legal_moves = true;
 
+//    // futility pruning
+//    if (options_.enable_futility_pruning
+//        && !is_pv_node // not a pv node
+//        && !is_tt_pv // not TT pv
+//        && !is_root_node // not root
+//        && depth == 1
+//        //&& eval >= beta + 150 * depth
+//        && eval + 150*depth < alpha
+//        && !move.IsCapture()
+//        ) {
+//      board.UndoMove();
+//      num_futility_moves_pruned_++;
+//      continue;
+//    }
+
+    move_count++;
+    if (quiet) {
+      quiets++;
+    }
+
     if (options_.enable_mobility_evaluation) {
+      //int player_mobility_score = MobilityEvaluation(board, player);
       int player_mobility_score = board.MobilityEvaluation(player);
       player_mobility_scores_[player_color] = player_mobility_score;
     }
@@ -421,37 +518,53 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
 //    }
 
     int e = 0;  // extension
-    if (options_.enable_extensions) {
 
-//      if (options_.enable_quiescence
-//          && move.GetStandardCapture() != nullptr
-//          && depth < 4
-//          && !positive_see) {
-//        e++;
-//      }
+    if (ply < root_depth_ * 2) {
+      // Singular extension search
+      if (options_.enable_singular_extensions
+          && !is_root_node
+          && !ss->excluded_move.has_value()  // avoid recursive singular search
+          && tte != nullptr
+          && depth >= 3 + 2 * (is_pv_node && is_tt_pv)
+          && move == tt_move
+          && std::abs(tte->score) < kMateValue
+          && tte->bound == LOWER_BOUND
+          && tte->depth >= depth - 3
+          ) {
 
-//      // works, but is too expensive
-//      // mate threat extension
-//      if (null_moves == 0
-//          && move.IsCapture()
-//          && depth <= 1
-//          && expanded <= 0
-//          && e <= 0) {
-//        // check if the other team would be mated after a null move
-//        // (finds checkmates)
-//        int mate_beta = kMateValue/2;
-//        board.MakeNullMove();  // next player makes null move
-//        PVInfo null_pvinfo;
-//        auto zw_value_or = Search(
-//            board, ply + 1, 2, mate_beta - 1, mate_beta,
-//            maximizing_player, expanded+2, deadline, null_pvinfo,
-//            null_moves + 1);
-//        board.UndoNullMove();
-//        if (zw_value_or.has_value()
-//            && mate_beta < std::get<0>(zw_value_or.value())) { // extend
-//          e = std::max(e, 3);
-//        }
-//      }
+        int singular_beta = tte->score;
+        int singular_depth = (depth - 1) / 2;
+
+        num_singular_extension_searches_++;
+        board.UndoMove();
+        ss->excluded_move = move;
+        PVInfo singular_pvinfo;
+        auto res_or = Search(ss, NonPV, board, ply, singular_depth,
+            singular_beta - 1, singular_beta, maximizing_player, expanded,
+            deadline, singular_pvinfo, null_moves);
+        if (!res_or.has_value()) {
+          return std::nullopt;
+        }
+        ss->excluded_move = std::nullopt;
+
+        int value = std::get<0>(res_or.value());
+        if (value < singular_beta) {
+          num_singular_extensions_++;
+          e = 1;
+        } else if (singular_beta >= beta) {
+          // multi-cut pruning
+          return std::make_pair(beta, std::nullopt);
+        } else if (tte->score >= beta) {
+          e = -2 - !is_pv_node;
+        } else if (tte->score <= value) {
+          e = -1;
+        } else if (tte->score <= alpha) {
+          e = -1;
+        }
+
+        // Remake the move
+        board.MakeMove(move);
+      }
 
     }
 
@@ -536,7 +649,6 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       best_move = move;
       pvinfo.SetChild(child_pvinfo);
       pvinfo.SetBestMove(move);
-      //b_search_pv = false;
     }
     if (!best_move.has_value()) {
       best_move = move;
@@ -557,12 +669,19 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
   if (options_.enable_transposition_table) {
     ScoreBound bound = beta <= alpha ? LOWER_BOUND : is_pv_node &&
       best_move.has_value() ? EXACT : UPPER_BOUND;
-    transposition_table_->Save(board.HashKey(), depth, best_move, score, bound);
+    transposition_table_->Save(board.HashKey(), depth, best_move, score, bound, is_pv_node);
   }
 
   if (best_move.has_value()
       && !best_move->IsCapture()) {
     UpdateQuietStats(ss, *best_move);
+  }
+
+  // If no good move is found and the previous position was tt_pv, then the
+  // previous opponent move is probably good and the new position is added to
+  // the search tree.
+  if (score <= alpha) {
+    ss->tt_pv = ss->tt_pv || ((ss-1)->tt_pv && depth > 3);
   }
 
   return std::make_tuple(score, best_move);
@@ -578,7 +697,7 @@ void AlphaBetaPlayer::UpdateQuietStats(Stack* ss, const Move& move) {
 }
 
 int AlphaBetaPlayer::Evaluate(Board& board, bool maximizing_player) {
-  int eval;
+  int eval; // w.r.t. RY team
   GameResult game_result = board.CheckWasLastMoveKingCapture();
   if (game_result != IN_PROGRESS) { // game is over
     if (game_result == WIN_RY) {
@@ -589,11 +708,90 @@ int AlphaBetaPlayer::Evaluate(Board& board, bool maximizing_player) {
       eval = 0; // stalemate
     }
   } else {
+    // Piece evaluation
     eval = board.PieceEvaluation();
+    // Mobility evaluation
     if (options_.enable_mobility_evaluation) {
       for (int i = 0; i < 4; i++) {
         eval += player_mobility_scores_[i];
       }
+    }
+    // King safety evaluation
+    if (options_.enable_king_safety) {
+      for (int color = 0; color < 4; ++color) {
+        int king_safety = 0;
+        Player player(static_cast<PlayerColor>(color));
+        Team team = player.GetTeam();
+        Team other = OtherTeam(team);
+        const auto king_location_or = board.GetKingLocation(player);
+        if (king_location_or.has_value()) {
+          const auto& king_location = king_location_or.value();
+          for (int delta_row = -1; delta_row <= 1; ++delta_row) {
+            for (int delta_col = -1; delta_col <= 1; ++delta_col) {
+              int row = king_location.GetRow() + delta_row;
+              int col = king_location.GetCol() + delta_col;
+              if ((row == 1 || row == 12 || col == 1 || col == 12)
+                  && board.IsLegalLocation(row, col)) {
+                const auto* piece = board.GetPiece(row, col);
+                BoardLocation piece_location(row, col);
+                if (piece != nullptr
+                    && piece->GetColor() == color
+                    && piece->GetPieceType() == PAWN) {
+                  king_safety += 30;
+                }
+                auto attackers = board.GetAttackers(other, piece_location);
+                if (attackers.size() > 1) {
+                  int value_of_attacks = 0;
+                  for (const auto& placed_piece : attackers) {
+                    switch(placed_piece.GetPiece()->GetPieceType()) {
+                    case KNIGHT:
+                      value_of_attacks += 20;
+                      break;
+                    case BISHOP:
+                      value_of_attacks += 30;
+                      break;
+                    case ROOK:
+                      value_of_attacks += 40;
+                      break;
+                    case QUEEN:
+                      value_of_attacks += 80;
+                      break;
+                    default:
+                      break;
+                    }
+                  }
+                  king_safety -= value_of_attacks * king_attack_weight_[attackers.size()] / 100;
+                }
+              }
+            }
+          }
+          const auto& castling_rights = board.GetCastlingRights(player);
+          if (!castling_rights.Kingside() && !castling_rights.Queenside()) {
+            king_safety -= 50;
+          }
+        }
+
+        if (color == RED || color == YELLOW) {
+          eval += king_safety;
+        } else {
+          eval -= king_safety;
+        }
+      }
+    }
+    if (options_.enable_move_based_evaluation) {
+      Player turn = board.GetTurn();
+      for (int color = 0; color < 4; ++color) {
+        Player player(static_cast<PlayerColor>(color));
+        board.SetPlayer(player);
+        auto moves = board.GetPseudoLegalMoves();
+        // Threats
+        int threats = 0;
+        for (const auto& move : moves) {
+        }
+
+        // King safety
+      }
+      board.SetPlayer(turn);
     }
   }
   return maximizing_player ? eval : -eval;
@@ -617,6 +815,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::MTDF(
   int lower_bound = -kMateValue;
   bool maximizing_player = board.TeamToPlay() == RED_YELLOW;
   Stack stack[kMaxPly + 10];
+  Stack* ss = stack + 7;
 
   std::optional<std::tuple<int, std::optional<Move>>> move_and_value;
   std::optional<Move> best_move;
@@ -624,7 +823,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::MTDF(
         || std::chrono::system_clock::now() < deadline.value())) {
     int b = std::max(g, lower_bound + 1);
     move_and_value = Search(
-        stack, Root, board, 1, depth, b - 1, b, maximizing_player, 0,
+        ss, Root, board, 1, depth, b - 1, b, maximizing_player, 0,
         deadline, pv_info_);
     if (!move_and_value.has_value()) {
       return std::nullopt;
@@ -644,6 +843,7 @@ void AlphaBetaPlayer::ResetMobilityScores(Board& board) {
   if (options_.enable_mobility_evaluation) {
     for (int i = 0; i < 4; i++) {
       Player player(static_cast<PlayerColor>(i));
+      //player_mobility_scores_[i] = MobilityEvaluation(board, player);
       player_mobility_scores_[i] = board.MobilityEvaluation(player);
     }
   }
@@ -682,9 +882,11 @@ std::optional<std::tuple<int, std::optional<Move>, int>> AlphaBetaPlayer::MakeMo
   bool maximizing_player = board.TeamToPlay() == RED_YELLOW;
   int searched_depth = 0;
   Stack stack[kMaxPly + 10];
+  Stack* ss = stack + 7;
 
   while (next_depth <= max_depth) {
     std::optional<std::tuple<int, std::optional<Move>>> move_and_value;
+    root_depth_ = next_depth;
 
     if (options_.enable_mtdf) {
       int f = 0;
@@ -694,7 +896,7 @@ std::optional<std::tuple<int, std::optional<Move>, int>> AlphaBetaPlayer::MakeMo
       move_and_value = MTDF(board, deadline, next_depth, f);
     } else {
       move_and_value = Search(
-          stack, Root, board, 1, next_depth, alpha, beta, maximizing_player, 0,
+          ss, Root, board, 1, next_depth, alpha, beta, maximizing_player, 0,
           deadline, pv_info_);
     }
 
@@ -725,7 +927,8 @@ std::vector<Move> AlphaBetaPlayer::MoveOrder(
     Board& board,
     bool maximizing_player,
     const std::optional<Move>& pvmove,
-    Move* killers) {
+    Move* killers,
+    bool quiescence) {
 
   if (!options_.enable_move_order) {
     return board.GetPseudoLegalMoves();
@@ -740,14 +943,14 @@ std::vector<Move> AlphaBetaPlayer::MoveOrder(
   // 1. PV or TT move
   // 2. Good captures
   // 3. Killers
-  // 4. Quiet moves
-  // 5. Bad captures
-  constexpr int kSep = 1000000;
-  constexpr int kPVMoveScore = 10 * kSep;
-  constexpr int kGoodCaptureScore = 9 * kSep;
-  constexpr int kKillerScore = 8 * kSep;
-  constexpr int kQuietMoveScore = 7 * kSep;
-  constexpr int kBadCaptureScore = 6 * kSep;
+  // 4. Bad captures
+  // 5. Quiet moves
+  int kSep = 1000000;
+  int kPVMoveScore = 10 * kSep;
+  int kGoodCaptureScore = 9 * kSep;
+  int kKillerScore = 8 * kSep;
+  int kBadCaptureScore = 7 * kSep;
+  int kQuietMoveScore = 6 * kSep;
 
   for (size_t i = 0; i < moves.size(); i++) {
     const auto& move = moves[i];
@@ -756,21 +959,43 @@ std::vector<Move> AlphaBetaPlayer::MoveOrder(
     const auto* capture = move.GetCapturePiece();
     const auto* piece = board.GetPiece(move.From());
 
+    bool is_pv_move = pvmove.has_value() && move == pvmove.value();
     if (pvmove.has_value() && move == pvmove.value()) {
       score = kPVMoveScore;
     } else if (killers != nullptr
                && (killers[0] == move || killers[1] == move)) {
       score = kKillerScore + (move == killers[0] ? 1 : 0);
     } else if (move.IsCapture()) {
-      // We'd ideally use SEE here, if it weren't so expensive to compute.
-      int captured_val = piece_evaluations_[capture->GetPieceType()];
-      int attacker_val = piece_evaluations_[piece->GetPieceType()];
-      if (attacker_val >= captured_val) {
-        score = kGoodCaptureScore;
+
+      if (options_.enable_see_move_ordering) {
+
+        int see;
+        if (board.GetPiece(move.From())->GetPieceType() == PAWN) {
+          see = piece_evaluations_[capture->GetPieceType()];
+        } else {
+          see = StaticExchangeEvaluationCapture(board, move);
+        }
+        if (see >= 0) {
+          score = kGoodCaptureScore;
+        } else {
+          score = kBadCaptureScore;
+        }
+        score += see;
+
       } else {
-        score = kBadCaptureScore;
+
+        // We'd ideally use SEE here, if it weren't so expensive to compute.
+        int captured_val = piece_evaluations_[capture->GetPieceType()];
+        int attacker_val = piece_evaluations_[piece->GetPieceType()];
+        if (attacker_val <= captured_val) {
+          score = kGoodCaptureScore;
+        } else {
+          score = kBadCaptureScore;
+        }
+        score += captured_val - attacker_val/100;
+
       }
-      score += captured_val - attacker_val;
+
     } else {
       score = kQuietMoveScore;
       if (options_.enable_history_heuristic) {
@@ -780,10 +1005,10 @@ std::vector<Move> AlphaBetaPlayer::MoveOrder(
       }
     }
 
-    if (options_.enable_move_order_checks) {
-      if (board.DeliversCheck(move)) {
-        score += 10'00;
-      }
+    if (options_.enable_move_order_checks
+        && !is_pv_move
+        && board.DeliversCheck(move)) {
+      score += 10'00;
     }
 
     score += piece_move_order_scores_[piece->GetPieceType()];
@@ -880,6 +1105,12 @@ int AlphaBetaPlayer::StaticExchangeEvaluation(
   return std::max(0, value_capture);
 }
 
+int AlphaBetaPlayer::ApproxSEECapture(
+    Board& board, const Move& move) const {
+  return piece_evaluations_[board.GetPiece(move.To())->GetPieceType()]
+    - piece_evaluations_[board.GetPiece(move.From())->GetPieceType()];
+}
+
 int PVInfo::GetDepth() const {
   if (best_move_.has_value()) {
     if (child_ == nullptr) {
@@ -888,6 +1119,21 @@ int PVInfo::GetDepth() const {
     return 1 + child_->GetDepth();
   }
   return 0;
+}
+
+int AlphaBetaPlayer::MobilityEvaluation(Board& board, Player turn) {
+  Player curr = board.GetTurn();
+  board.SetPlayer(turn);
+
+  constexpr int kMobilityMultiplier = 5;
+  auto moves = board.GetPseudoLegalMoves();
+  int eval = (int) kMobilityMultiplier * moves.size();
+
+  eval *= turn.GetTeam() == RED_YELLOW ? 1 : -1;
+
+  board.SetPlayer(curr);
+
+  return eval;
 }
 
 }  // namespace chess
