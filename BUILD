@@ -89,6 +89,7 @@ cc_test(
     deps = [
         ":utils",
         ":board",
+        ":player",
         "@com_google_googletest//:gtest_main",
     ],
 )

@@ -1492,6 +1492,10 @@ TEST(BoardTest, IsKingInCheckFalse) {
   EXPECT_FALSE(board->IsKingInCheck(Player(GREEN)));
 }
 
+TEST(BoardTest, Enpassant) {
+  auto board = 
+}
+
 
 }  // namespace chess
 

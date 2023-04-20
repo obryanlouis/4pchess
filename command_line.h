@@ -15,6 +15,8 @@
 namespace chess {
 
 struct EvaluationOptions {
+  std::optional<int> movetime; // search exactly x mseconds
+
   std::vector<Move> search_moves;
   std::optional<bool> ponder;
   std::optional<int> red_time;

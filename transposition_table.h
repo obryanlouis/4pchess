@@ -31,7 +31,7 @@ class TranspositionTable {
 
   ~TranspositionTable() {
     if (hash_table_ != nullptr) {
-      delete[] hash_table_;
+      free(hash_table_);
     }
   }
 

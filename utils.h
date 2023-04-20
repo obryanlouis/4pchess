@@ -29,6 +29,8 @@ void SendInvalidCommandMessage(const std::string& line);
 
 std::optional<Move> ParseMove(Board& board, const std::string& move_str);
 
+std::optional<BoardLocation> ParseEnpLocation(const std::string& enp);
+
 }  // namespace chess
 
 #endif  // _UTILS_H_

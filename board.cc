@@ -202,23 +202,36 @@ void Board::GetPawnMoves(
         }
       }
     } else {
+
       // En-passant
       if (other_piece->GetPieceType() == PAWN
           && piece.GetTeam() != other_piece->GetTeam()) {
-        if (!moves_.empty()) {
-          const auto& last_move = moves_.back();
-          if (last_move.To() == to
-              && last_move.ManhattanDistance() == 2) {
-            const BoardLocation& moved_from = last_move.From();
-            int delta_row = to.GetRow() - moved_from.GetRow();
-            int delta_col = to.GetCol() - moved_from.GetCol();
-            BoardLocation enpassant_to = moved_from.Relative(
-                delta_row / 2, delta_col / 2);
-            AddPawnMoves(moves, from, enpassant_to, piece.GetColor(),
-                         nullptr, to, other_piece);
+
+        int n_turns = (4 + piece.GetColor() - other_piece->GetColor()) % 4;
+        const Move* other_player_move = nullptr;
+        if (n_turns < (int)moves_.size()) {
+          other_player_move = &moves_[moves_.size() - n_turns - 1];
+        } else if (n_turns < 4) {
+          const auto& enp_move = enp_.enp_moves[other_piece->GetColor()];
+          if (enp_move.has_value()) {
+            other_player_move = &enp_move.value();
           }
         }
+
+        if (other_player_move != nullptr
+            && other_player_move->To() == to
+            && other_player_move->ManhattanDistance() == 2) {
+          const BoardLocation& moved_from = other_player_move->From();
+          int delta_row = to.GetRow() - moved_from.GetRow();
+          int delta_col = to.GetCol() - moved_from.GetCol();
+          BoardLocation enpassant_to = moved_from.Relative(
+              delta_row / 2, delta_col / 2);
+          AddPawnMoves(moves, from, enpassant_to, piece.GetColor(),
+                       nullptr, to, other_piece);
+        }
+
       }
+
     }
   }
 
@@ -880,6 +893,10 @@ std::vector<Move> Board::GetPseudoLegalMoves() {
 }
 
 GameResult Board::GetGameResult() {
+  if (!GetKingLocation(turn_).has_value()) {
+    // other team won
+    return turn_.GetTeam() == RED_YELLOW ? WIN_BG : WIN_RY;
+  }
   Player player = turn_;
   for (const auto& move : GetPseudoLegalMoves()) {
     MakeMove(move);
@@ -893,6 +910,9 @@ GameResult Board::GetGameResult() {
     if (legal) {
       return IN_PROGRESS;
     }
+  }
+  if (!IsKingInCheck(player)) {
+    return STALEMATE;
   }
   // No legal moves
   PlayerColor color = player.GetColor();
@@ -932,7 +952,7 @@ GameResult Board::CheckWasLastMoveKingCapture() const {
   // King captured last move
   if (!moves_.empty()) {
     const auto& last_move = moves_.back();
-    const auto* capture = last_move.GetStandardCapture();
+    const auto* capture = last_move.GetCapturePiece();
     if (capture != nullptr && capture->GetPieceType() == KING) {
       return capture->GetTeam() == RED_YELLOW ? WIN_BG : WIN_RY;
     }
@@ -990,10 +1010,13 @@ void Board::MakeMove(const Move& move) {
   // 4. Promotion
   // 5. Castling (rights, rook move)
 
+  //std::cout << "MakeMove 1" << std::endl;
+
   const auto* piece = GetPiece(move.From());
 
   // Capture
   const auto* capture = GetPiece(move.To());
+  //std::cout << "MakeMove 3" << std::endl;
   if (capture != nullptr) {
     RemovePiece(move.To());
     int value = piece_evaluations_[capture->GetPieceType()];
@@ -1004,6 +1027,7 @@ void Board::MakeMove(const Move& move) {
     }
   }
 
+  //std::cout << "MakeMove 4" << std::endl;
   RemovePiece(move.From());
   const auto& promotion_piece_type = move.GetPromotionPieceType();
   if (promotion_piece_type.has_value()) { // Promotion
@@ -1024,6 +1048,7 @@ void Board::MakeMove(const Move& move) {
     SetPiece(move.To(), *piece);
   }
 
+  //std::cout << "MakeMove 5" << std::endl;
   // En-passant
   const auto& enpassant_location = move.GetEnpassantLocation();
   if (enpassant_location.has_value()) {
@@ -1044,6 +1069,7 @@ void Board::MakeMove(const Move& move) {
     }
   }
 
+  //std::cout << "MakeMove 6" << std::endl;
   int t = static_cast<int>(turn_.GetColor());
   UpdateTurnHash(t);
   UpdateTurnHash((t+1)%4);
@@ -1203,7 +1229,8 @@ int Board::MobilityEvaluation() {
 Board::Board(
     Player turn,
     std::unordered_map<BoardLocation, Piece> location_to_piece,
-    std::optional<std::unordered_map<Player, CastlingRights>> castling_rights)
+    std::optional<std::unordered_map<Player, CastlingRights>> castling_rights,
+    std::optional<EnpassantInitialization> enp)
   : turn_(std::move(turn))
     {
 
@@ -1217,6 +1244,9 @@ Board::Board(
 
   if (castling_rights.has_value()) {
     castling_rights_ = std::move(castling_rights.value());
+  }
+  if (enp.has_value()) {
+    enp_ = std::move(enp.value());
   }
   move_buffer_.reserve(1000);
 
@@ -1546,7 +1576,7 @@ std::string BoardLocation::PrettyStr() const {
 }
 
 std::string Move::PrettyStr() const {
-  return from_.PrettyStr() + to_.PrettyStr();
+  return from_.PrettyStr() + "-" + to_.PrettyStr();
 }
 
 bool Board::DeliversCheck(const Move& move) {

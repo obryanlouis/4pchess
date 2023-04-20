@@ -338,6 +338,11 @@ class PlacedPiece {
   const Piece* piece_ = nullptr;
 };
 
+struct EnpassantInitialization {
+  // Indexed by PlayerColor
+  std::optional<Move> enp_moves[4];
+};
+
 class Board {
  // Conventions:
  // - Red is on the bottom of the board, blue on the left, yellow on top,
@@ -350,7 +355,8 @@ class Board {
       Player turn,
       std::unordered_map<BoardLocation, Piece> location_to_piece,
       std::optional<std::unordered_map<Player, CastlingRights>>
-        castling_rights = std::nullopt);
+        castling_rights = std::nullopt,
+      std::optional<EnpassantInitialization> enp = std::nullopt);
 
   Board(Board&) = default;
 
@@ -464,6 +470,7 @@ class Board {
   bool IsLegalLocation(const BoardLocation& location) const {
     return IsLegalLocation(location.GetRow(), location.GetCol());
   }
+  const EnpassantInitialization& GetEnpassantInitialization() { return enp_; }
 
  private:
 
@@ -520,6 +527,7 @@ class Board {
   BoardLocation locations_[14][14];
 
   std::unordered_map<Player, CastlingRights> castling_rights_;
+  EnpassantInitialization enp_;
   std::vector<Move> moves_; // list of moves from beginning of game
   std::vector<Move> move_buffer_;
   int piece_evaluations_[6];
@@ -529,7 +537,6 @@ class Board {
   int64_t piece_hashes_[6][14][14];
   int64_t turn_hashes_[4];
   BoardLocation king_locations_[4];
-
 };
 
 // Helper functions

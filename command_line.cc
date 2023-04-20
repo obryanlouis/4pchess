@@ -22,6 +22,11 @@ namespace chess {
 constexpr char kEngineName[] = "4pChess 0.1";
 constexpr char kAuthorName[] = "Louis O.";
 
+using std::chrono::milliseconds;
+using std::chrono::system_clock;
+using std::chrono::time_point;
+using std::chrono::duration_cast;
+
 namespace {
 
 std::string GetPVStr(const AlphaBetaPlayer& player) {
@@ -67,10 +72,6 @@ void CommandLine::SetBoard(std::shared_ptr<Board> board) {
 
 void CommandLine::StopEvaluation() {
   std::lock_guard lock(mutex_);
-  if (best_move_.has_value()) {
-    std::cout << "bestmove " << best_move_->PrettyStr() << std::endl;
-    best_move_ = std::nullopt;
-  }
   if (thread_ != nullptr) {
     if (player_ != nullptr) {
       player_->SetCanceled(true);
@@ -104,6 +105,7 @@ void CommandLine::StartEvaluation() {
     int depth = 1;
     std::shared_ptr<Board> board;
     std::shared_ptr<AlphaBetaPlayer> player;
+    EvaluationOptions options;
     {
       std::lock_guard lock(mutex_);
       if (board_ == nullptr || player_ == nullptr) {
@@ -113,25 +115,51 @@ void CommandLine::StartEvaluation() {
       }
       board = board_;
       player = player_;
+      options = options_;
     }
-    auto start = std::chrono::system_clock::now();
-    int num_eval_start = player->GetNumEvaluations();
 
-    while (!player->IsCanceled()) {
-      bool canceled = false;
-      {
-        std::lock_guard lock(mutex_);
-        canceled = player_->IsCanceled();
-      }
-      if (canceled) {
+    // if the game is over, print a string showing that
+    auto game_result = board->GetGameResult();
+    if (game_result != IN_PROGRESS) {
+      switch (game_result) {
+      case WIN_RY:
+        SendInfoMessage("Game completed. RY won."); 
+        break;
+      case WIN_BG:
+        SendInfoMessage("Game completed. BG won."); 
+        break;
+      case STALEMATE:
+        SendInfoMessage("Game completed. Stalemate."); 
+        break;
+      default:
         break;
       }
+      return;
+    }
 
-      auto res = player->MakeMove(*board, /*time_limit=*/std::nullopt, depth);
+    auto start = system_clock::now();
+    int num_eval_start = player->GetNumEvaluations();
+    std::optional<Move> best_move;
+
+    std::optional<time_point<system_clock>> deadline;
+    if (options.movetime.has_value()) {
+      deadline = start + milliseconds(options.movetime.value());
+    }
+    std::optional<milliseconds> time_limit;
+
+    while (!player->IsCanceled()
+           && (!options.depth.has_value() || depth <= options.depth.value())
+           && (!deadline.has_value()
+               || system_clock::now() < deadline.value())) {
+      if (deadline.has_value()) {
+        time_limit = duration_cast<milliseconds>(
+            deadline.value() - system_clock::now());
+      }
+      auto res = player->MakeMove(*board, time_limit, depth);
 
       if (res.has_value()) {
-        auto duration_ms = std::chrono::duration_cast<
-          std::chrono::milliseconds>(std::chrono::system_clock::now() - start);
+        auto duration_ms = duration_cast<milliseconds>(
+            system_clock::now() - start);
         int num_evals = player->GetNumEvaluations() - num_eval_start;
         std::optional<int> nps;
         if (duration_ms.count() > 0) {
@@ -152,16 +180,18 @@ void CommandLine::StartEvaluation() {
         }
         std::cout << std::endl;
 
-        {
-          std::lock_guard lock(mutex_);
-          best_move_ = std::get<1>(res.value());
-        }
+        best_move = std::get<1>(res.value());
 
       } else {
         break;
       }
 
       depth++;
+    }
+
+    if (best_move.has_value()) {
+      std::cout << "bestmove " << best_move->PrettyStr() << std::endl;
+      best_move = std::nullopt;
     }
 
   });
@@ -313,6 +343,7 @@ void CommandLine::HandleCommand(
     // integer options
     std::unordered_map<std::string, std::optional<int>*>
       option_name_to_value;
+    option_name_to_value["movetime"] = &options.movetime;
     option_name_to_value["rtime"] = &options.red_time;
     option_name_to_value["btime"] = &options.blue_time;
     option_name_to_value["ytime"] = &options.yellow_time;
@@ -341,6 +372,7 @@ void CommandLine::HandleCommand(
         if (!value->has_value()) {
           SendInvalidCommandMessage("Can not parse integer: {}" + int_str);
         }
+        cmd_id += 2;
       } else if (option_name == "searchmoves") {
         options.search_moves.clear();
         size_t move_id = cmd_id + 1;
@@ -355,10 +387,13 @@ void CommandLine::HandleCommand(
           }
         }
 
+        cmd_id += 1 + options.search_moves.size();
       } else if (option_name == "ponder") { 
         options.ponder = true;
+        cmd_id++;
       } else if (option_name == "infinite") { 
         options.infinite = true;
+        cmd_id++;
       }
 
     }
@@ -377,6 +412,7 @@ void CommandLine::HandleCommand(
     StartEvaluation();
   } else if (command == "quit") {
     // exit the program
+    StopEvaluation();
     running_ = false;
   } else {
     SendInvalidCommandMessage(line);

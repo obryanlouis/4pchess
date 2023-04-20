@@ -71,9 +71,40 @@ std::optional<std::vector<bool>> ParseCastlingAvailability(
   return availability;
 }
 
+std::optional<BoardLocation> ParseEnpLocation(const std::string& enp) {
+  size_t pos = enp.find(':');
+  if (pos == std::string::npos) {
+    return std::nullopt;
+  }
+  std::string to = enp.substr(pos + 1);
+  if (!to.empty() && to[to.size() - 1] == '\'') {
+    to = to.substr(0, to.size() - 1);
+  }
+  if (to.size() < 2 || to.size() > 3) {
+    return std::nullopt;
+  }
+  int col = to[0] - 'a';
+  if (col < 0 || col > 13) {
+    return std::nullopt;
+  }
+  int row = to[1] - '0';
+  if (row < 0 || row > 9) {
+    return std::nullopt;
+  }
+  if (to.size() > 2) {
+    int digit = to[2] - '0';
+    if (digit < 0 || digit > 9) {
+      return std::nullopt;
+    }
+    row = 10 * row + digit;
+  }
+  row = 14 - row;  // transform to 0-13
+  return BoardLocation(row, col);
+}
+
 std::shared_ptr<Board> ParseBoardFromFEN(const std::string& fen) {
   std::vector<std::string> parts = SplitStr(fen, "-");
-  if (parts.size() != 7) {
+  if (parts.size() < 7 || parts.size() > 8) {
     return nullptr;  // invalid format
   }
 
@@ -81,10 +112,23 @@ std::shared_ptr<Board> ParseBoardFromFEN(const std::string& fen) {
   // Also, currently we don't use the halfmove clock since we don't expect the
   // 50-move rule to apply in real games.
 
+  // 0: Player to move
+  // 1: Eliminated players (unused)
+  // 2-3: Castling rights
+  // 4: Points (unused)
+  // 5: Halfmove clock (unused)
+  // 6 (optional?): En-passant
+  // 7: Piece placement
+
   const auto& player_str = parts[0];
   const auto& castling_availability_kingside = parts[2];
   const auto& castling_availability_queenside = parts[3];
-  const auto& piece_placement = parts[6];
+  const auto& piece_placement = parts.back();
+
+  std::string enpassant;
+  if (parts.size() == 8) {
+    enpassant = parts[6];
+  }
 
   // Parse player
   if (player_str.size() != 1) {
@@ -126,6 +170,47 @@ std::shared_ptr<Board> ParseBoardFromFEN(const std::string& fen) {
     Player pl(static_cast<PlayerColor>(player_color));
     castling_rights[pl] = CastlingRights(kingside.value()[player_color],
                                          queenside.value()[player_color]);
+  }
+
+  // Parse enpassant
+  EnpassantInitialization enp;
+  if (!enpassant.empty()) {
+    size_t lbrace_pos = enpassant.find('(');
+    size_t rbrace_pos = enpassant.rfind(')');
+    if (lbrace_pos == std::string::npos || rbrace_pos == std::string::npos) {
+      // invalid enpassant string
+      return nullptr;
+    }
+    auto parts = SplitStr(
+        enpassant.substr(lbrace_pos + 1, rbrace_pos - lbrace_pos), ",");
+    if (parts.size() != 4) { // invalid
+      return nullptr;
+    }
+    for (int i = 0; i < 4; i++) {
+      auto enp_location = ParseEnpLocation(parts[i]);
+      if (enp_location.has_value()) {
+        BoardLocation& to = enp_location.value();
+        int from_row = to.GetRow();
+        int from_col = to.GetCol();
+        switch (static_cast<PlayerColor>(i)) {
+        case RED:
+          from_row += 2;
+          break;
+        case BLUE:
+          from_col -= 2;
+          break;
+        case YELLOW:
+          from_row -= 2;
+          break;
+        case GREEN:
+          from_col += 2;
+          break;
+        default:
+          break;
+        }
+        enp.enp_moves[i] = Move(BoardLocation(from_row, from_col), to);
+      }
+    }
   }
 
   // Parse piece placement
@@ -216,7 +301,7 @@ std::shared_ptr<Board> ParseBoardFromFEN(const std::string& fen) {
 
   return std::make_shared<Board>(
       std::move(player), std::move(location_to_piece),
-      std::move(castling_rights));
+      std::move(castling_rights), std::move(enp));
 }
 
 void SendInfoMessage(const std::string& message) {
@@ -231,11 +316,20 @@ namespace {
 
 std::optional<std::tuple<size_t, BoardLocation>> ParseLocation(
     const std::string& move_str, size_t start) {
+  if (start < move_str.size() && move_str[start] == '-') {
+    start++;
+  }
   if (move_str.size() < start + 2) {
     return std::nullopt;
   }
+
+  // Skip piece name, if present
   char c = move_str[start];
-  int col = c - 'a';
+  if (c == 'K' || c == 'Q' || c == 'N' || c == 'B' || c == 'R') {
+    start++;
+  }
+
+  int col = move_str[start] - 'a';
   if (col < 0 || col >= 14) {
     return std::nullopt;
   }
@@ -245,11 +339,20 @@ std::optional<std::tuple<size_t, BoardLocation>> ParseLocation(
     return std::nullopt;
   }
   start++;
+
+  // Skip '-' and 'x'
+  if (start < move_str.size()
+      && (move_str[start] == '-' || move_str[start] == 'x')) {
+    start++;
+  }
+
   if (start < move_str.size() && std::isdigit(move_str[start])) {
     int digit = move_str[start] - '0';
     row = 10 * row + digit;
     start++;
   }
+  // transform 1-14 upwards to 0-13 downwards
+  row = 14 - row;
   return std::make_tuple(start, BoardLocation(row, col));
 }
 

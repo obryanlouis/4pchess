@@ -22,3 +22,5 @@ ui/bin/*
 
 todo.txt
 nohup*
+api_key*.txt
+__pycache__*
