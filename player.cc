@@ -443,6 +443,8 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
     if (options_.enable_late_move_pruning
         && ply > 4
         && quiet
+        && !is_tt_pv
+        && !is_pv_node
         && depth <= 14
         && quiets >= late_move_pruning_[depth]) {
       num_lm_pruned_++;
