@@ -12,8 +12,8 @@ namespace chess {
 
 constexpr int kNumGames = 100;
 constexpr int kMaxMovesPerGame = 100;
-constexpr int kNumThreads = 10;
-constexpr int kMoveTimeLimitMs = 1000;
+constexpr int kNumThreads = 12;
+constexpr int kMoveTimeLimitMs = 5000;
 
 class StrengthTest {
  public:
@@ -24,8 +24,8 @@ class StrengthTest {
       move_time_limit_ = std::chrono::milliseconds(kMoveTimeLimitMs);
     }
 
-    player1_options_.test = false;
-    player2_options_.test = true;
+    player1_options_.enable_check_extensions = false;
+    player2_options_.enable_check_extensions = true;
   }
 
   void Run() {
@@ -103,6 +103,14 @@ class StrengthTest {
         }
         auto move = std::get<1>(res.value()).value();
         board->MakeMove(move);
+        int piece_eval = board->PieceEvaluation();
+        if (std::abs(piece_eval) >= 30) {
+          if ((piece_eval > 0) == player2_moves_first) {
+            player2_score += 1;
+          }
+          end_early = true;
+          break;
+        }
       }
       if (!end_early) {
         int piece_eval = board->PieceEvaluation();

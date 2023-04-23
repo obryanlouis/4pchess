@@ -349,13 +349,15 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
   }
 
   bool in_check = false;
-  if ((options_.enable_null_move_pruning
-      && !is_root_node // not root
-      && !ss->excluded_move.has_value()
-      && !is_pv_node // not a pv node
-      && null_moves == 0 // last move wasn't null
-      && eval >= beta)
-      || options_.enable_late_move_pruning) {
+  if (options_.enable_late_move_pruning
+      || options_.enable_fail_high_reductions
+      || options_.enable_check_extensions
+      || (options_.enable_null_move_pruning
+          && !is_root_node // not root
+          && !ss->excluded_move.has_value()
+          && !is_pv_node // not a pv node
+          && null_moves == 0 // last move wasn't null
+          && eval >= beta)) {
     in_check = board.IsKingInCheck(player);
   }
 
@@ -396,14 +398,19 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
   }
 
   // fail-high reductions
-  if (!is_pv_node // not a pv node
+  if (options_.enable_fail_high_reductions
+      && !is_pv_node // not a pv node
       && !is_tt_pv // not TT pv
       && !is_root_node // not root
       && eval >= beta
       && !in_check
       && isCutNode
       && depth > 10 // insure we are at a high enough depth
-      && beta > -2000) depth--;
+      && beta > -2000
+      ) {
+    num_fail_high_reductions_++;
+    depth--;
+  }
 
   std::vector<Move> pseudo_legal_moves;
   std::optional<Move> pv_move = pvinfo.GetBestMove();
@@ -441,7 +448,6 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
     bool quiet = !in_check && !move.IsCapture() && !delivers_check;
 
     if (options_.enable_late_move_pruning
-        && ply > 4
         && quiet
         && !is_tt_pv
         && !is_pv_node
@@ -582,7 +588,11 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
     }
 
     // check extensions at early moves.
-    if (in_check && move_count < 6) {
+    if (options_.enable_check_extensions
+        && in_check
+        && move_count < 6
+        && expanded < 3) {
+      num_check_extensions_++;
       e = 1;
     }
 
