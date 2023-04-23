@@ -103,7 +103,8 @@ class AlphaBetaPlayer {
       int expanded,
       const std::optional<std::chrono::time_point<std::chrono::system_clock>>& deadline,
       PVInfo& pv_info,
-      int null_moves = 0);
+      int null_moves = 0,
+      bool isCutNode = false);
 
   std::optional<std::tuple<int, std::optional<Move>>> MTDF(
       Board& board,
