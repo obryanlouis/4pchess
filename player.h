@@ -43,13 +43,15 @@ struct PlayerOptions {
   bool enable_null_move_pruning = true;
   bool enable_late_move_reduction = true;
   bool enable_killers = true;
-  bool enable_king_safety = false;
+  bool enable_king_safety = true;
   bool enable_late_move_pruning = true;
   bool enable_transposition_table = true; // Only starts being better at around 20-30 sec/move.
+  bool enable_check_extensions = true;
 
   // generic test change
-  bool test = false;
+  bool test = true;
 
+  bool enable_fail_high_reductions = false;
   bool enable_move_based_evaluation = false;
   bool enable_see_move_ordering = false;
   bool enable_singular_extensions = false;
@@ -136,6 +138,8 @@ class AlphaBetaPlayer {
     return num_singular_extensions_;
   }
   int64_t GetNumLateMovesPruned() { return num_lm_pruned_; }
+  int64_t GetNumFailHighReductions() { return num_fail_high_reductions_; }
+  int64_t GetNumCheckExtensions() { return num_check_extensions_++; }
 
 //  ~AlphaBetaPlayer() {
 //    if (hash_table_ != nullptr) {
@@ -184,6 +188,9 @@ class AlphaBetaPlayer {
   int64_t num_singular_extension_searches_ = 0;
   int64_t num_singular_extensions_ = 0;
   int64_t num_lm_pruned_ = 0;
+  int64_t num_fail_high_reductions_ = 0;
+  int64_t num_check_extensions_ = 0;
+
   PVInfo pv_info_;
   std::atomic<bool> canceled_ = false;
   int piece_evaluations_[6];

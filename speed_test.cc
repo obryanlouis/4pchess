@@ -14,16 +14,12 @@ TEST(Speed, BoardTest) {
   auto start = std::chrono::system_clock::now();
   auto board = Board::CreateStandardSetup();
   PlayerOptions options;
-  //options.enable_king_safety = false;
-  //options.test = false;
-  //options.enable_singular_extensions = false;
-  options.enable_late_move_pruning = false;
+  options.enable_check_extensions = true;
   AlphaBetaPlayer player(options);
   player.EnableDebug(true);
 
   std::chrono::milliseconds time_limit(5000);
-  auto res = player.MakeMove(*board, time_limit, 10);
-//  auto res = player.MakeMove(*board, std::nullopt, 4);
+  auto res = player.MakeMove(*board, time_limit);
 
   auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
       std::chrono::system_clock::now() - start);
@@ -31,6 +27,12 @@ TEST(Speed, BoardTest) {
   int nps = (int) ((((float)player.GetNumEvaluations()) / duration.count())*1000.0);
   std::cout << "Nodes/sec: " << nps << std::endl;
   std::cout << "Nodes: " << player.GetNumEvaluations() << std::endl;
+  if (options.enable_check_extensions) {
+    std::cout << "#Check extensions: " << player.GetNumCheckExtensions() << std::endl;
+  }
+  if (options.enable_fail_high_reductions) {
+    std::cout << "#Fail-high reductions: " << player.GetNumFailHighReductions() << std::endl;
+  }
   if (options.enable_late_move_pruning) {
     std::cout << "#LM pruned: " << player.GetNumLateMovesPruned() << std::endl;
   }
