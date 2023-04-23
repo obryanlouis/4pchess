@@ -261,7 +261,8 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
     const std::optional<
         std::chrono::time_point<std::chrono::system_clock>>& deadline,
     PVInfo& pvinfo,
-    int null_moves) {
+    int null_moves,
+    bool isCutNode) {
   if (canceled_.load() || (deadline.has_value()
         && std::chrono::system_clock::now() >= deadline.value())) {
     return std::nullopt;
@@ -590,7 +591,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       value_and_move_or = Search(
           ss+1, NonPV, board, ply + 1, depth - 1 - r + e,
           -alpha-1, -alpha, !maximizing_player, expanded + e,
-          deadline, *child_pvinfo, null_moves);
+          deadline, *child_pvinfo, null_moves, !isCutNode);
       if (value_and_move_or.has_value()) {
         int score = -std::get<0>(value_and_move_or.value());
         if (score > alpha) {  // re-search
@@ -598,7 +599,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
           value_and_move_or = Search(
               ss+1, NonPV, board, ply + 1, depth - 1 + e,
               -beta, -alpha, !maximizing_player, expanded + e,
-              deadline, *child_pvinfo, null_moves);
+              deadline, *child_pvinfo, null_moves, !isCutNode);
         }
       }
 
@@ -606,7 +607,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       value_and_move_or = Search(
           ss+1, NonPV, board, ply + 1, depth - 1 + e,
           -alpha-1, -alpha, !maximizing_player, expanded + e,
-          deadline, *child_pvinfo, null_moves);
+          deadline, *child_pvinfo, null_moves, !isCutNode);
     }
 
     // For PV nodes only, do a full PV search on the first move or after a fail
@@ -619,7 +620,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
         value_and_move_or = Search(
             ss+1, PV, board, ply + 1, depth - 1 + e,
             -beta, -alpha, !maximizing_player, expanded + e,
-            deadline, *child_pvinfo, null_moves);
+            deadline, *child_pvinfo, null_moves, true);
     }
 
     board.UndoMove();
