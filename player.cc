@@ -394,6 +394,16 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
     }
   }
 
+  // fail-high reductions
+  if (!is_pv_node // not a pv node
+      && !is_tt_pv // not TT pv
+      && !is_root_node // not root
+      && eval >= beta
+      && !in_check
+      && isCutNode
+      && depth > 8 // insure we are at a high enough depth
+      && beta > -2000) depth--;
+
   std::vector<Move> pseudo_legal_moves;
   std::optional<Move> pv_move = pvinfo.GetBestMove();
   pseudo_legal_moves = MoveOrder(
