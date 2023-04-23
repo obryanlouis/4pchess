@@ -402,7 +402,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       && eval >= beta
       && !in_check
       && isCutNode
-      && depth > 8 // insure we are at a high enough depth
+      && depth > 10 // insure we are at a high enough depth
       && beta > -2000) depth--;
 
   std::vector<Move> pseudo_legal_moves;
