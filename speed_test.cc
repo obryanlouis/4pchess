@@ -14,7 +14,7 @@ TEST(Speed, BoardTest) {
   auto start = std::chrono::system_clock::now();
   auto board = Board::CreateStandardSetup();
   PlayerOptions options;
-  options.enable_check_extensions = true;
+  options.enable_king_safety = false;
   AlphaBetaPlayer player(options);
   player.EnableDebug(true);
 

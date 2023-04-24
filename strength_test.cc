@@ -24,8 +24,11 @@ class StrengthTest {
       move_time_limit_ = std::chrono::milliseconds(kMoveTimeLimitMs);
     }
 
-    player1_options_.enable_check_extensions = false;
-    player2_options_.enable_check_extensions = true;
+    player1_options_.enable_piece_development = false;
+    player2_options_.enable_piece_development = true;
+
+    //player1_options_.max_search_depth = 6;
+    //player2_options_.max_search_depth = 6;
   }
 
   void Run() {

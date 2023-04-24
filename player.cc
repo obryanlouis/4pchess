@@ -724,6 +724,36 @@ void AlphaBetaPlayer::UpdateQuietStats(Stack* ss, const Move& move) {
   }
 }
 
+namespace {
+
+constexpr int kPieceImbalanceTable[16] = {
+  0, -25, -45, -100, -135, -200, -700, -800,
+  -800, -800, -800, -800, -800, -800, -800, -800,
+};
+
+std::tuple<int, int> GetPieceStatistics(
+    const std::vector<PlacedPiece>& pieces,
+    PlayerColor color) {
+  int num_major = 0;
+  int num_undeveloped = 0;
+  float sum_center_dist = 0;
+  for (const auto& placed_piece : pieces) {
+    PieceType pt = placed_piece.GetPiece()->GetPieceType();
+    if (pt != PAWN && pt != KING) {
+      num_major++;
+      const auto& loc = placed_piece.GetLocation();
+      int row = loc.GetRow();
+      int col = loc.GetCol();
+      float center_dist = std::sqrt((row - 6.5) * (row - 6.5) + (col - 6.5) * (col - 6.5));
+      sum_center_dist += center_dist;
+    }
+  }
+  float avg_center_dist = sum_center_dist / std::max(num_major, 1);
+  return std::make_tuple(num_major, avg_center_dist);
+}
+
+}  // namespace
+
 int AlphaBetaPlayer::Evaluate(Board& board, bool maximizing_player) {
   int eval; // w.r.t. RY team
   GameResult game_result = board.CheckWasLastMoveKingCapture();
@@ -738,12 +768,36 @@ int AlphaBetaPlayer::Evaluate(Board& board, bool maximizing_player) {
   } else {
     // Piece evaluation
     eval = board.PieceEvaluation();
+
+    if (options_.enable_piece_imbalance
+        || options_.enable_piece_development) {
+      const auto& piece_list = board.GetPieceList();
+      auto red_stats = GetPieceStatistics(piece_list[RED], RED);
+      auto blue_stats = GetPieceStatistics(piece_list[BLUE], BLUE);
+      auto yellow_stats = GetPieceStatistics(piece_list[YELLOW], YELLOW);
+      auto green_stats = GetPieceStatistics(piece_list[GREEN], GREEN);
+
+      // Piece imbalance
+      if (options_.enable_piece_imbalance) {
+        eval -= kPieceImbalanceTable[std::abs(std::get<0>(red_stats) - std::get<0>(yellow_stats))];
+        eval += kPieceImbalanceTable[std::abs(std::get<0>(blue_stats) - std::get<0>(green_stats))];
+      }
+
+      // Piece development
+      if (options_.enable_piece_development) {
+        eval -= 50 * (std::get<1>(red_stats) + std::get<1>(yellow_stats)
+          - std::get<1>(blue_stats) - std::get<1>(green_stats));
+      }
+
+    }
+
     // Mobility evaluation
     if (options_.enable_mobility_evaluation) {
       for (int i = 0; i < 4; i++) {
         eval += player_mobility_scores_[i];
       }
     }
+
     // King safety evaluation
     if (options_.enable_king_safety) {
       for (int color = 0; color < 4; ++color) {
@@ -806,21 +860,7 @@ int AlphaBetaPlayer::Evaluate(Board& board, bool maximizing_player) {
         }
       }
     }
-    if (options_.enable_move_based_evaluation) {
-      Player turn = board.GetTurn();
-      for (int color = 0; color < 4; ++color) {
-        Player player(static_cast<PlayerColor>(color));
-        board.SetPlayer(player);
-        auto moves = board.GetPseudoLegalMoves();
-        // Threats
-        int threats = 0;
-        for (const auto& move : moves) {
-        }
 
-        // King safety
-      }
-      board.SetPlayer(turn);
-    }
   }
   return maximizing_player ? eval : -eval;
 }
@@ -903,7 +943,7 @@ std::optional<std::tuple<int, std::optional<Move>, int>> AlphaBetaPlayer::MakeMo
 
   ResetMobilityScores(board);
 
-  int next_depth = 1 + pv_info_.GetDepth();
+  int next_depth = std::min(1 + pv_info_.GetDepth(), max_depth);
   std::optional<std::tuple<int, std::optional<Move>>> res;
   int alpha = -kMateValue;
   int beta = kMateValue;

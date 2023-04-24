@@ -1014,17 +1014,21 @@ void Board::MakeMove(const Move& move) {
 
   const auto* piece = GetPiece(move.From());
 
-  // Capture
-  const auto* capture = GetPiece(move.To());
-  //std::cout << "MakeMove 3" << std::endl;
+  const auto* capture = move.GetCapturePiece();
   if (capture != nullptr) {
-    RemovePiece(move.To());
     int value = piece_evaluations_[capture->GetPieceType()];
     if (capture->GetTeam() == RED_YELLOW) {
       piece_evaluation_ -= value;
     } else {
       piece_evaluation_ += value;
     }
+  }
+
+  // Capture
+  const auto* standard_capture = GetPiece(move.To());
+  //std::cout << "MakeMove 3" << std::endl;
+  if (standard_capture != nullptr) {
+    RemovePiece(move.To());
   }
 
   //std::cout << "MakeMove 4" << std::endl;
@@ -1104,16 +1108,20 @@ void Board::UndoMove() {
     SetPiece(from, *piece);
   }
 
-  // Place back captured pieces
-  const auto* standard_capture = move.GetStandardCapture();
-  if (standard_capture != nullptr) {
-    SetPiece(to, *standard_capture);
-    int value = piece_evaluations_[standard_capture->GetPieceType()];
-    if (standard_capture->GetTeam() == RED_YELLOW) {
+  const auto* capture = move.GetCapturePiece();
+  if (capture != nullptr) {
+    int value = piece_evaluations_[capture->GetPieceType()];
+    if (capture->GetTeam() == RED_YELLOW) {
       piece_evaluation_ += value;
     } else {
       piece_evaluation_ -= value;
     }
+  }
+
+  // Place back captured pieces
+  const auto* standard_capture = move.GetStandardCapture();
+  if (standard_capture != nullptr) {
+    SetPiece(to, *standard_capture);
   }
 
   // Place back en-passant pawns

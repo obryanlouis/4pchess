@@ -471,6 +471,7 @@ class Board {
     return IsLegalLocation(location.GetRow(), location.GetCol());
   }
   const EnpassantInitialization& GetEnpassantInitialization() { return enp_; }
+  const std::vector<std::vector<PlacedPiece>>& GetPieceList() { return piece_list_; };
 
  private:
 
@@ -530,7 +531,7 @@ class Board {
   EnpassantInitialization enp_;
   std::vector<Move> moves_; // list of moves from beginning of game
   std::vector<Move> move_buffer_;
-  int piece_evaluations_[6];
+  int piece_evaluations_[6]; // one per piece type
   int piece_evaluation_ = 0;
 
   int64_t hash_key_ = 0;

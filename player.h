@@ -47,12 +47,13 @@ struct PlayerOptions {
   bool enable_late_move_pruning = true;
   bool enable_transposition_table = true; // Only starts being better at around 20-30 sec/move.
   bool enable_check_extensions = true;
+  bool enable_piece_imbalance = true;
+  bool enable_piece_development = true;
 
   // generic test change
   bool test = true;
 
   bool enable_fail_high_reductions = false;
-  bool enable_move_based_evaluation = false;
   bool enable_see_move_ordering = false;
   bool enable_singular_extensions = false;
   bool enable_quiescence = false;
