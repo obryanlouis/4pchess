@@ -13,6 +13,8 @@
 
 namespace chess {
 
+class Board;
+
 constexpr int kNumPieceTypes = 6;
 
 enum PieceType {
@@ -288,6 +290,7 @@ class Move {
   friend std::ostream& operator<<(
       std::ostream& os, const Move& move);
   std::string PrettyStr() const;
+  bool DeliversCheck(Board& board);
 
  private:
   BoardLocation from_;
@@ -311,6 +314,9 @@ class Move {
 
   // Castling rights after the move
   std::optional<CastlingRights> castling_rights_;
+
+  // Cached check
+  std::optional<bool> delivers_check_;
 };
 
 enum GameResult {
@@ -546,6 +552,7 @@ Team OtherTeam(Team team);
 Team GetTeam(PlayerColor color);
 Player GetNextPlayer(const Player& player);
 Player GetPreviousPlayer(const Player& player);
+Player GetPartner(const Player& player);
 
 
 }  // namespace chess

@@ -485,6 +485,14 @@ void Board::GetKingMoves(
           break;
         }
 
+        // Make sure the rook is present
+        const auto* rook = GetPiece(rook_location);
+        if (rook == nullptr
+            || rook->GetPieceType() != ROOK
+            || rook->GetTeam() != piece.GetTeam()) {
+          continue;
+        }
+
         // Make sure that there are no pieces between the king and rook
         bool piece_between = false;
         for (const auto& loc : squares_between) {
@@ -499,15 +507,9 @@ void Board::GetKingMoves(
           if (!IsAttackedByTeam(other_team, squares_between[0])
               && !IsAttackedByTeam(other_team, from)) {
             // Additionally move the castle
-            const auto* rook = GetPiece(rook_location);
-            // Sanity check: the rook should be there
-            if (rook != nullptr
-                && rook->GetPieceType() == ROOK
-                && rook->GetTeam() == piece.GetTeam()) {
-              SimpleMove rook_move(rook_location, squares_between[0], rook);
-              moves.emplace_back(from, squares_between[1], rook_move,
-                  initial_castling_rights, castling_rights);
-            }
+            SimpleMove rook_move(rook_location, squares_between[0], rook);
+            moves.emplace_back(from, squares_between[1], rook_move,
+                initial_castling_rights, castling_rights);
           }
         }
       }
@@ -1345,6 +1347,20 @@ Player GetNextPlayer(const Player& player) {
   }
 }
 
+Player GetPartner(const Player& player) {
+  switch (player.GetColor()) {
+  case RED:
+    return kYellowPlayer;
+  case BLUE:
+    return kGreenPlayer;
+  case YELLOW:
+    return kRedPlayer;
+  case GREEN:
+  default:
+    return kBluePlayer;
+  }
+}
+
 inline Player GetPreviousPlayer(const Player& player) {
   switch (player.GetColor()) {
   case RED:
@@ -1645,6 +1661,13 @@ void Board::UndoNullMove() {
   int t = static_cast<int>(turn_.GetColor());
   UpdateTurnHash(t);
   UpdateTurnHash((t+1)%4);
+}
+
+bool Move::DeliversCheck(Board& board) {
+  if (!delivers_check_.has_value()) {
+    delivers_check_ = board.DeliversCheck(*this);
+  }
+  return delivers_check_.value();
 }
 
 }  // namespace chess

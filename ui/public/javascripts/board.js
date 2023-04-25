@@ -283,6 +283,10 @@ export class Move {
     return Math.abs(this.from.getRow() - this.to.getRow())
       + Math.abs(this.from.getCol() - this.to.getCol());
   }
+  getCapture() {
+    return this.standard_capture != null ? this.standard_capture
+         : this.en_passant_capture;
+  }
 
   static FromStandardMove(
       from, to, standard_capture = null, initial_castling_rights = null,
@@ -438,6 +442,13 @@ export class Board {
     const enpassant_location = move.getEnpassantLocation();
     if (enpassant_location != null) {
       this.removePiece(enpassant_location);
+      capture = move.getEnpassantCapture();
+      var value = piece_evaluations[capture.getPieceType()];
+      if (capture.getTeam().equals(RED_YELLOW)) {
+        this.piece_evaluation -= value;
+      } else {
+        this.piece_evaluation += value;
+      }
     } else {
       // Castling
       const rook_move = move.getRookMove();
@@ -474,7 +485,7 @@ export class Board {
     const to = move.getTo();
     const from = move.getFrom();
 
-    // Move the piece back.
+    // Move the piece back
     const promotion_piece_type = move.getPromotionPieceType();
     if (promotion_piece_type != null) {
       // Handle promotions
@@ -500,6 +511,13 @@ export class Board {
     const enpassant_location = move.getEnpassantLocation();
     if (enpassant_location != null) {
       this.setPiece(enpassant_location, move.getEnpassantCapture());
+      var capture = move.getEnpassantCapture();
+      var value = piece_evaluations[capture.getPieceType()];
+      if (capture.getTeam().equals(RED_YELLOW)) {
+        this.piece_evaluation += value;
+      } else {
+        this.piece_evaluation -= value;
+      }
     } else {
       // Castling: rook move
       const rook_move = move.getRookMove();
@@ -917,6 +935,14 @@ export class Board {
             break;
           default:
             break;
+          }
+
+          // Make sure that the rook is present
+          const rook = this.getPiece(rook_location);
+          if (rook == null
+              || !rook.getPieceType().equals(ROOK)
+              || !rook.getTeam().equals(piece.getTeam())) {
+            continue;
           }
 
           // Make sure that there are no pieces between the king and rook

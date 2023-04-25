@@ -154,9 +154,9 @@ std::optional<int> AlphaBetaPlayer::QuiescenceSearch(
 
   for (int i = pseudo_legal_moves.size() - 1;
       i >= 0 && num_moves_examined < kMaxQuiescenceMoves; i--) {
-    const auto& move = pseudo_legal_moves[i];
+    auto& move = pseudo_legal_moves[i];
     bool active = checked
-               || board.DeliversCheck(move)
+               || move.DeliversCheck(board)
                || (move.GetStandardCapture() != nullptr
                    // approx SEE >= 0
 //                   && piece_evaluations_[board.GetPiece(move.From())->GetPieceType()]
@@ -341,8 +341,9 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       && !is_pv_node // not a pv node
       && !is_tt_pv // not TT pv
       && !is_root_node // not root
-      && depth < 2 // important for mate finding
-      && eval >= beta + 500 * depth
+      && depth < 9 // important for mate finding
+      && eval >= beta + 150 * depth
+      && eval < 25000
       ) {
     num_futility_moves_pruned_++;
     return std::make_pair(beta, std::nullopt);
@@ -350,6 +351,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
 
   bool in_check = false;
   if (options_.enable_late_move_pruning
+      || options_.enable_late_move_reduction
       || options_.enable_fail_high_reductions
       || options_.enable_check_extensions
       || (options_.enable_null_move_pruning
@@ -367,7 +369,6 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       && !ss->excluded_move.has_value()
       && !is_pv_node // not a pv node
       && null_moves == 0 // last move wasn't null
-      //&& !board.IsKingInCheck(player) // not in check
       && !in_check // not in check
       && eval >= beta
       ) {
@@ -418,6 +419,11 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       board, maximizing_player, pv_move.has_value() ? pv_move : tt_move,
       ss->killers);
 
+  bool partner_checked = false;
+  if (options_.enable_late_move_reduction) {
+    partner_checked = board.IsKingInCheck(GetPartner(player));
+  }
+
   std::optional<Move> best_move;
   int player_color = static_cast<int>(player.GetColor());
   int curr_mob_score = player_mobility_scores_[player_color];
@@ -427,7 +433,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
   int quiets = 0;
   for (int i = pseudo_legal_moves.size() - 1; i >= 0; i--) {
     std::optional<std::tuple<int, std::optional<Move>>> value_and_move_or;
-    const auto& move = pseudo_legal_moves[i];
+    auto& move = pseudo_legal_moves[i];
     if (move == ss->excluded_move) {
       continue;
     }
@@ -442,7 +448,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       ;
     if (lmr_cond1 || options_.enable_late_move_pruning) {
       // this has to be called before the move is made
-      delivers_check = board.DeliversCheck(move);
+      delivers_check = move.DeliversCheck(board);
     }
 
     bool quiet = !in_check && !move.IsCapture() && !delivers_check;
@@ -598,7 +604,8 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
 
     bool lmr = lmr_cond1
         && !delivers_check
-        && !board.IsKingInCheck(player.GetTeam());
+        && !in_check
+        && !partner_checked;
 
     if (lmr) {
       num_lmr_searches_++;
@@ -735,7 +742,6 @@ std::tuple<int, int> GetPieceStatistics(
     const std::vector<PlacedPiece>& pieces,
     PlayerColor color) {
   int num_major = 0;
-  int num_undeveloped = 0;
   float sum_center_dist = 0;
   for (const auto& placed_piece : pieces) {
     PieceType pt = placed_piece.GetPiece()->GetPieceType();
@@ -1021,7 +1027,7 @@ std::vector<Move> AlphaBetaPlayer::MoveOrder(
   int kQuietMoveScore = 6 * kSep;
 
   for (size_t i = 0; i < moves.size(); i++) {
-    const auto& move = moves[i];
+    auto& move = moves[i];
     int score = 0;
 
     const auto* capture = move.GetCapturePiece();
@@ -1075,7 +1081,7 @@ std::vector<Move> AlphaBetaPlayer::MoveOrder(
 
     if (options_.enable_move_order_checks
         && !is_pv_move
-        && board.DeliversCheck(move)) {
+        && move.DeliversCheck(board)) {
       score += 10'00;
     }
 
