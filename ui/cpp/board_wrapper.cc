@@ -1,5 +1,6 @@
 #include "board_wrapper.h"
 
+#include <memory>
 #include <mutex>
 #include <chrono>
 #include <cmath>
@@ -34,6 +35,8 @@ using v8::Value;
 
 std::mutex Player::mutex_;
 std::vector<Player*> Player::players_;
+std::shared_ptr<chess::AlphaBetaPlayer> Player::last_player_;
+int64_t Player::last_board_hash_;
 
 
 PlacedPiece::PlacedPiece(v8::Isolate* isolate, int row, int col, int piece_type, int player_color)
@@ -320,7 +323,6 @@ void Player::New(const v8::FunctionCallbackInfo<v8::Value>& args) {
 
   if (args.IsConstructCall()) {
     Player* obj = new Player(isolate);
-    Local<External> external = External::New(isolate, obj);
     obj->Wrap(args.This());
     args.GetReturnValue().Set(args.This());
   } else {
@@ -340,10 +342,23 @@ void Player::MakeMove(const v8::FunctionCallbackInfo<v8::Value>& args) {
   Local<Context> context = isolate->GetCurrentContext();
 
   Player* player_wrap = MyObjectWrap::Unwrap<Player>(args.Holder());
-  chess::AlphaBetaPlayer& player = player_wrap->GetPlayer();
   Board* board_wrap = MyObjectWrap::Unwrap<Board>(
       args[0]->ToObject(context).ToLocalChecked());
   chess::Board* board = board_wrap->GetBoard();
+  int64_t board_hash = board->HashKey();
+
+  std::shared_ptr<chess::AlphaBetaPlayer> player_ptr = player_wrap->GetPlayer();
+  if (player_ptr == nullptr) {
+    player_ptr = GetLatestPlayer(board_hash);
+    if (player_ptr == nullptr) {
+      player_ptr = std::make_shared<chess::AlphaBetaPlayer>();
+    }
+    player_wrap->SetPlayer(player_ptr);
+  }
+
+  chess::AlphaBetaPlayer& player = *player_ptr;
+  SetLatestPlayer(player_ptr, board_hash);
+  player_ptr->SetCanceled(false);
 
   int depth = args[1]->Int32Value(context).FromJust();
   // by default, there's no time limit
@@ -372,11 +387,11 @@ void Player::MakeMove(const v8::FunctionCallbackInfo<v8::Value>& args) {
       if (evaluation > 0) {
         // +inf
         res->Set(context, String::NewFromUtf8Literal(isolate, "evaluation"),
-                 String::NewFromUtf8Literal(isolate, "Infinity"));
+                 String::NewFromUtf8Literal(isolate, "Infinity")).Check();
       } else {
         // -inf
         res->Set(context, String::NewFromUtf8Literal(isolate, "evaluation"),
-                 String::NewFromUtf8Literal(isolate, "-Infinity"));
+                 String::NewFromUtf8Literal(isolate, "-Infinity")).Check();
       }
     } else {
       res->Set(context, String::NewFromUtf8Literal(isolate, "evaluation"),
@@ -414,35 +429,37 @@ void Player::MakeMove(const v8::FunctionCallbackInfo<v8::Value>& args) {
 
       // Set "turn"
       pv->Set(context, String::NewFromUtf8Literal(isolate, "turn"),
-              v8::Integer::New(isolate, static_cast<int>(player.GetColor())));
+              v8::Integer::New(isolate, static_cast<int>(player.GetColor())))
+        .Check();
 
       // Set "from"
       const auto& loc_from = move.From();
       Local<Object> from = Object::New(isolate);
       from->Set(context, String::NewFromUtf8Literal(isolate, "row"),
-              v8::Integer::New(isolate, loc_from.GetRow()));
+              v8::Integer::New(isolate, loc_from.GetRow())).Check();
       from->Set(context, String::NewFromUtf8Literal(isolate, "col"),
-              v8::Integer::New(isolate, loc_from.GetCol()));
-      pv->Set(context, String::NewFromUtf8Literal(isolate, "from"), from);
+              v8::Integer::New(isolate, loc_from.GetCol())).Check();
+      pv->Set(context, String::NewFromUtf8Literal(isolate, "from"), from)
+        .Check();
 
       // Set "to"
       const auto& loc_to = move.To();
       Local<Object> to = Object::New(isolate);
       to->Set(context, String::NewFromUtf8Literal(isolate, "row"),
-              v8::Integer::New(isolate, loc_to.GetRow()));
+              v8::Integer::New(isolate, loc_to.GetRow())).Check();
       to->Set(context, String::NewFromUtf8Literal(isolate, "col"),
-              v8::Integer::New(isolate, loc_to.GetCol()));
-      pv->Set(context, String::NewFromUtf8Literal(isolate, "to"), to);
+              v8::Integer::New(isolate, loc_to.GetCol())).Check();
+      pv->Set(context, String::NewFromUtf8Literal(isolate, "to"), to).Check();
 
       // Add to array
-      principal_variation->Set(context, i, pv);
+      principal_variation->Set(context, i, pv).Check();
 
       player = chess::GetNextPlayer(player);
     }
 
     res->Set(
         context, String::NewFromUtf8Literal(isolate, "principal_variation"),
-        principal_variation);
+        principal_variation).Check();
 
     args.GetReturnValue().Set(res);
   }
@@ -451,7 +468,10 @@ void Player::MakeMove(const v8::FunctionCallbackInfo<v8::Value>& args) {
 
 void Player::CancelEvaluation(const v8::FunctionCallbackInfo<v8::Value>& args) {
   Player* obj = MyObjectWrap::Unwrap<Player>(args.Holder());
-  obj->GetPlayer().CancelEvaluation();
+  auto player = obj->GetPlayer();
+  if (player != nullptr) {
+    player->CancelEvaluation();
+  }
 }
 
 Player::Player(v8::Isolate* isolate) {
@@ -477,8 +497,30 @@ void Player::RemoveFromGlobalObjList(Player* obj) {
 void Player::CancelAllEvaluations() {
   std::lock_guard lock(mutex_);
   for (Player* obj : players_) {
-    obj->GetPlayer().CancelEvaluation();
+    auto player = obj->GetPlayer();
+    if (player != nullptr) {
+      player->CancelEvaluation();
+    }
   }
+}
+
+
+void Player::SetLatestPlayer(std::shared_ptr<chess::AlphaBetaPlayer> player,
+    int64_t board_hash) {
+  std::lock_guard lock(mutex_);
+  if (last_player_ == nullptr || last_board_hash_ != board_hash) {
+    last_player_ = player;
+    last_board_hash_ = board_hash;
+  }
+}
+
+std::shared_ptr<chess::AlphaBetaPlayer> Player::GetLatestPlayer(
+    int64_t board_hash) {
+  std::lock_guard lock(mutex_);
+  if (last_board_hash_ == board_hash) {
+    return last_player_;
+  }
+  return nullptr;
 }
 
 
