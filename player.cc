@@ -188,8 +188,8 @@ std::optional<int> AlphaBetaPlayer::QuiescenceSearch(
     }
 
     if (options_.enable_mobility_evaluation) {
-      //int player_mobility_score = MobilityEvaluation(board, player);
       int player_mobility_score = board.MobilityEvaluation(player);
+
       player_mobility_scores_[turn_i] = player_mobility_score;
     }
 
@@ -503,7 +503,6 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
     }
 
     if (options_.enable_mobility_evaluation) {
-      //int player_mobility_score = MobilityEvaluation(board, player);
       int player_mobility_score = board.MobilityEvaluation(player);
       player_mobility_scores_[player_color] = player_mobility_score;
     }
@@ -917,7 +916,6 @@ void AlphaBetaPlayer::ResetMobilityScores(Board& board) {
   if (options_.enable_mobility_evaluation) {
     for (int i = 0; i < 4; i++) {
       Player player(static_cast<PlayerColor>(i));
-      //player_mobility_scores_[i] = MobilityEvaluation(board, player);
       player_mobility_scores_[i] = board.MobilityEvaluation(player);
     }
   }
@@ -1193,21 +1191,6 @@ int PVInfo::GetDepth() const {
     return 1 + child_->GetDepth();
   }
   return 0;
-}
-
-int AlphaBetaPlayer::MobilityEvaluation(Board& board, Player turn) {
-  Player curr = board.GetTurn();
-  board.SetPlayer(turn);
-
-  constexpr int kMobilityMultiplier = 5;
-  auto moves = board.GetPseudoLegalMoves();
-  int eval = (int) kMobilityMultiplier * moves.size();
-
-  eval *= turn.GetTeam() == RED_YELLOW ? 1 : -1;
-
-  board.SetPlayer(curr);
-
-  return eval;
 }
 
 }  // namespace chess

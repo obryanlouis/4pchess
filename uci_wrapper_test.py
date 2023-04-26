@@ -1,33 +1,40 @@
 import uci_wrapper
 
-#for start_fen in [
-#  uci_wrapper.START_FEN_OLD,
-#  uci_wrapper.START_FEN_NEW,
-#  uci_wrapper.START_FEN_BYG,
-#  uci_wrapper.START_FEN_BY,
-#  uci_wrapper.START_FEN_RBG,
-#]:
-#  uci = uci_wrapper.UciWrapper()
-#  uci.set_position(start_fen)
-#  move = uci.get_best_move(100)
-#  assert move is not None
-#  print('best move:', move)
-#
-## Run one game to completion
-#uci = uci_wrapper.UciWrapper()
-#completed = False
-#moves = []
-#while len(moves) <= 1000:
-#  uci.set_position(uci_wrapper.START_FEN_NEW, moves)
-#  move = uci.get_best_move(10)
-#  assert move is not None
-#  if move == 'gameover':
-#    completed = True
-#    break
-#  moves.append(move)
-#
-#assert completed
-#print(f'Game finished in {len(moves)}')
+for start_fen in [
+  uci_wrapper.START_FEN_OLD,
+  uci_wrapper.START_FEN_NEW,
+  uci_wrapper.START_FEN_BYG,
+  uci_wrapper.START_FEN_BY,
+  uci_wrapper.START_FEN_RBG,
+]:
+  uci = uci_wrapper.UciWrapper()
+  uci.set_position(start_fen)
+  res = uci.get_best_move(100)
+  print(res)
+
+# Run with pv callback
+uci = uci_wrapper.UciWrapper()
+uci.set_position(uci_wrapper.START_FEN_NEW)
+def pv_callback(pv):
+  print('pv callback:', pv)
+uci.get_best_move(1000, pv_callback)
+
+# Run one game to completion
+uci = uci_wrapper.UciWrapper()
+completed = False
+moves = []
+while len(moves) <= 100:
+  uci.set_position(uci_wrapper.START_FEN_NEW, moves)
+  res = uci.get_best_move(10)
+  if res.get('gameover'):
+    completed = True
+    break
+  moves.append(res['best_move'])
+
+if completed:
+  print(f'Game finished in {len(moves)} moves')
+else:
+  print(f'Game still going after {len(moves)} moves')
 
 # Run a specific game.
 uci = uci_wrapper.UciWrapper()

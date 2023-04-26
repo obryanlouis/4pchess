@@ -13,7 +13,7 @@ namespace chess {
 constexpr int kNumGames = 100;
 constexpr int kMaxMovesPerGame = 100;
 constexpr int kNumThreads = 12;
-constexpr int kMoveTimeLimitMs = 5000;
+constexpr int kMoveTimeLimitMs = 1000;
 
 class StrengthTest {
  public:
@@ -24,11 +24,8 @@ class StrengthTest {
       move_time_limit_ = std::chrono::milliseconds(kMoveTimeLimitMs);
     }
 
-    player1_options_.enable_futility_pruning = false;
-    player2_options_.enable_futility_pruning = true;
-
-    //player1_options_.max_search_depth = 6;
-    //player2_options_.max_search_depth = 6;
+    player1_options_.test = false;
+    player2_options_.test = true;
   }
 
   void Run() {

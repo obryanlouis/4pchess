@@ -150,7 +150,9 @@ void CommandLine::StartEvaluation() {
     while (!player->IsCanceled()
            && (!options.depth.has_value() || depth <= options.depth.value())
            && (!deadline.has_value()
-               || system_clock::now() < deadline.value())) {
+               || system_clock::now() < deadline.value())
+           // sanity check: past depth 100 won't help
+           && depth < 100) {
       if (deadline.has_value()) {
         time_limit = duration_cast<milliseconds>(
             deadline.value() - system_clock::now());

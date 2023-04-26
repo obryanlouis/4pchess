@@ -442,9 +442,9 @@ export class Board {
     const enpassant_location = move.getEnpassantLocation();
     if (enpassant_location != null) {
       this.removePiece(enpassant_location);
-      capture = move.getEnpassantCapture();
-      var value = piece_evaluations[capture.getPieceType()];
-      if (capture.getTeam().equals(RED_YELLOW)) {
+      const enp_capture = move.getEnpassantCapture();
+      var value = piece_evaluations[enp_capture.getPieceType()];
+      if (enp_capture.getTeam().equals(RED_YELLOW)) {
         this.piece_evaluation -= value;
       } else {
         this.piece_evaluation += value;
