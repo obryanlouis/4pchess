@@ -116,8 +116,8 @@ class Server:
         buffer_ms = 1000
         move_time_ms = self._pgn4_info.incr_time_ms - buffer_ms
         min_remaining_ms = 30000
-        if self._pgn4_info.base_time_ms > min_remaining_ms:
-          move_time_ms += (self._pgn4_info.base_time_ms - min_remaining_ms) / 20
+        if clock_ms > min_remaining_ms:
+          move_time_ms += (clock_ms - min_remaining_ms) / 20
 
         move_time_ms = min(move_time_ms, max_move_ms)
 

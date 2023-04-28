@@ -1,11 +1,12 @@
-import * as board_util from './board.js';
+import * as board_util from './board.mjs';
+import * as utils from './utils.mjs';
 
 (function() {
 
 var board;
 var clicked_loc = null;
 var legal_moves = null;
-var moves = [];
+var moves = []; // list of (move, piece_type)
 var move_index = null;
 var board_key_to_eval = {};
 const player_id_to_color = {0: 'red', 1: 'blue', 2: 'yellow', 3: 'green'};
@@ -100,16 +101,46 @@ $(document).ready(function() {
     }
     window.localStorage['secs_per_move'] = secs_per_move;
   });
+  $('#pgn_input').change(function() {
+    $('#pgn_error').text('');
+    var pgn_str = $(this).val();
+    if (pgn_str != '') {
+      var pgn_board = null;
+      var pgn_moves = null;
+      var piece_types = null;
+      try {
+        var res = utils.parseGameFromPGN(pgn_str);
+        pgn_board = res['board'];
+        pgn_moves = res['moves'];
+        piece_types = res['piece_types'];
+      } catch (error) {
+        $('#pgn_error').text(error.toString());
+      }
+      if (pgn_board != null) {
+        // add piece type to moves
+        var moves_and_piece_types = [];
+        for (var i = 0; i < pgn_moves.length; i++) {
+          moves_and_piece_types.push([pgn_moves.at(i), piece_types.at(i)]);
+        }
+        resetBoard(pgn_board, moves_and_piece_types);
+        displayBoard();
+      }
+    }
+  });
 })
 
-function resetBoard() {
-  board = board_util.Board.CreateStandardSetup();
+function resetBoard(set_board = null, set_moves = null) {
+  if (set_board == null) {
+    board = board_util.Board.CreateStandardSetup();
+    moves = [];
+    move_index = null;
+  } else {
+    board = set_board;
+    moves = set_moves;
+    move_index = set_moves.length - 1;
+  }
   clicked_loc = null;
   legal_moves = null;
-  moves = [];
-  move_index = null;
-
-//  setTimeout(executeDebugMoves, 0);
 }
 
 function sleep(ms) {

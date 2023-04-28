@@ -261,6 +261,11 @@ export class Move {
     this.ends_game = null;
   }
 
+  equals(other) {
+    return (typeof this == typeof other
+            && this.toString() == other.toString());
+  }
+
   toString() {
     return `Move(${this.from}, ${this.to}, ${this.standard_capture},
         ${this.initial_castling_rights}, ${this.castling_rights},
@@ -312,14 +317,6 @@ export class Move {
 function getOtherTeam(team) {
   return team.equals(RED_YELLOW) ? BLUE_GREEN : RED_YELLOW;
 }
-
-var piece_evaluations = {};
-piece_evaluations[PAWN] = 1;
-piece_evaluations[KNIGHT] = 3;
-piece_evaluations[BISHOP] = 4;
-piece_evaluations[ROOK] = 5;
-piece_evaluations[QUEEN] = 10;
-piece_evaluations[KING] = 0;
 
 function getNextPlayer(player) {
   switch (player.getColor()) {
@@ -386,7 +383,6 @@ export class Board {
     }
     // Moves since start of the game.
     this.moves = [];
-    this.piece_evaluation = 0;
     this.piece_list = {};
     this.piece_list[PlayerColor.Red] = [];
     this.piece_list[PlayerColor.Blue] = [];
@@ -395,12 +391,6 @@ export class Board {
     for (let key in location_to_piece) {
       var loc, piece;
       [loc, piece] = location_to_piece[key];
-      var evaluation = piece_evaluations[piece.getPieceType()];
-      if (piece.getTeam().equals(RED_YELLOW)) {
-        this.piece_evaluation += evaluation;
-      } else {
-        this.piece_evaluation -= evaluation;
-      }
       this.piece_list[piece.getColor()].push(new PlacedPiece(loc, piece));
     }
   }
@@ -418,12 +408,6 @@ export class Board {
     const capture = this.getPiece(move.getTo());
     if (capture != null) {
       this.removePiece(move.getTo());
-      var value = piece_evaluations[capture.getPieceType()];
-      if (capture.getTeam().equals(RED_YELLOW)) {
-        this.piece_evaluation -= value;
-      } else {
-        this.piece_evaluation += value;
-      }
     }
 
     const promotion_piece_type = move.getPromotionPieceType();
@@ -443,12 +427,6 @@ export class Board {
     if (enpassant_location != null) {
       this.removePiece(enpassant_location);
       const enp_capture = move.getEnpassantCapture();
-      var value = piece_evaluations[enp_capture.getPieceType()];
-      if (enp_capture.getTeam().equals(RED_YELLOW)) {
-        this.piece_evaluation -= value;
-      } else {
-        this.piece_evaluation += value;
-      }
     } else {
       // Castling
       const rook_move = move.getRookMove();
@@ -499,12 +477,6 @@ export class Board {
     const standard_capture = move.getStandardCapture();
     if (standard_capture != null) {
       this.setPiece(to, standard_capture);
-      var value = piece_evaluations[standard_capture.getPieceType()];
-      if (standard_capture.getTeam().equals(RED_YELLOW)) {
-        this.piece_evaluation += value;
-      } else {
-        this.piece_evaluation -= value;
-      }
     }
 
     // Place back en-passant pawns
@@ -512,12 +484,6 @@ export class Board {
     if (enpassant_location != null) {
       this.setPiece(enpassant_location, move.getEnpassantCapture());
       var capture = move.getEnpassantCapture();
-      var value = piece_evaluations[capture.getPieceType()];
-      if (capture.getTeam().equals(RED_YELLOW)) {
-        this.piece_evaluation += value;
-      } else {
-        this.piece_evaluation -= value;
-      }
     } else {
       // Castling: rook move
       const rook_move = move.getRookMove();
@@ -1117,13 +1083,12 @@ export class Board {
   }
 
   getAllLegalMoves() {
-    var placed_pieces = this.piece_list[this.turn.getColor()];
+    const placed_pieces = this.piece_list[this.turn.getColor()];
     var legal_moves = [];
-    for (var i = 0; i < placed_pieces.length; i++) {
-      var placed_piece = placed_pieces.at(i);
-      legal_moves =
-        legal_moves.concat(this.getLegalMoves(placed_piece.getPiece(),
-              placed_piece.getLocation()));
+    for (var placed_piece of [...placed_pieces]) {
+      var piece_moves = this.getLegalMoves(
+          placed_piece.getPiece(), placed_piece.getLocation());
+      legal_moves = legal_moves.concat(piece_moves);
     }
     return legal_moves;
   }
@@ -1265,6 +1230,40 @@ export class Board {
       break;
     }
     return null;
+  }
+
+  toString() {
+    var parts = [];
+    for (var row = 0; row < 14; row += 1) {
+      var part = [];
+      for (var col = 0; col < 14; col += 1) {
+        if (!this.isLegalLocationRowCol(row, col)) {
+          part.push('x');
+        } else {
+          var piece = this.getPieceRowCol(row, col);
+          if (piece == null) {
+            part.push('.');
+          } else {
+            var pt = piece.getPieceType();
+            if (pt.equals(PAWN)) {
+              part.push('P');
+            } else {
+              part.push(piece.getPieceType().short_name);
+            }
+          }
+        }
+      }
+      parts.push(part.join(''));
+    }
+//    for (let key in this.piece_list) {
+//      console.log('key', key);
+//      var placed_pieces = this.piece_list[key];
+//      for (var placed_piece of placed_pieces) {
+//        var piece = placed_piece.getPiece();
+//        console.log('placed piece', placed_piece.getLocation(), piece.getPieceType());
+//      }
+//    }
+    return parts.join('\n');
   }
 
 }
