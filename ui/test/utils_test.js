@@ -135,4 +135,96 @@ describe('utils tests', function(){
 
   });
 
+  it('parse game from pgn with castling', function(){
+      var pgn = `
+[Variant "Teams"]
+[RuleVariants "EnPassant"]
+[CurrentMove "32"]
+[TimeControl "2 | 10"]
+
+1. h2-h3 .. b7-c7 .. g13-g12 .. m8-l8
+2. Qg1-i3 .. b9-c9 .. Qh14-g13 .. Qn7-m8
+3. Ne1-f3 .. Qa8-b9 .. i13-i12 .. m6-l6
+4. e2-e3 .. Na10-c11 .. Ne14-f12 .. Nn10-l9
+5. Bf1-e2 .. Na5-c6 .. Nj14-k12 .. Nn5-l4
+6. O-O-O .. Ba6-b7 .. j13-j12 .. m5-l5
+7. Nj1-k3 .. O-O .. Bi14-j13 .. Bn6-m5
+8. Bi1-h2 .. Ra6-a7 .. O-O-O .. O-O-O
+      `;
+      var res = utils.parseGameFromPGN(pgn);
+
+      test.bool(res['board'] != null).isTrue();
+      test.bool(res['moves'] != null).isTrue();
+      test.number(res['moves'].length).is(32);
+  });
+
+  it('parse game from pgn with castling -- other sides', function(){
+      var pgn = `
+[Variant "Teams"]
+[RuleVariants "EnPassant"]
+[CurrentMove "18"]
+[TimeControl "4 min"]
+
+1. Nj1-i3 .. Na10-c9 .. Ne14-f12 .. Nn10-l9
+2. j2-j3 .. b8-c8 .. e13-e12 .. m10-l10
+3. Bi1-j2 .. Ba9-c7 .. Bf14-e13 .. Bn9-m10
+4. O-O .. Qa8-b8 .. O-O .. O-O
+5. g2-g3 .. O-O-O
+      `;
+      var res = utils.parseGameFromPGN(pgn);
+
+      test.bool(res['board'] != null).isTrue();
+      test.bool(res['moves'] != null).isTrue();
+      test.number(res['moves'].length).is(18);
+  });
+
+  it('parse game from pgn with promotions', function(){
+      var pgn = `
+[Variant "Teams"]
+[RuleVariants "EnPassant"]
+[CurrentMove "40"]
+[TimeControl "2 | 10"]
+
+1. h2-h4 .. b7-d7 .. g13-g11 .. m8-k8
+2. h4-h5 .. d7-e7 .. g11-g10 .. k8-j8
+3. h5-h6 .. e7-f7 .. g10-g9 .. j8-i8
+4. h6-h7 .. f7-g7 .. g9-g8 .. Nn10-m8
+5. h7-h8 .. g7-h7 .. g8-g7 .. Nn5-l6
+6. h8-h9 .. h7-i7 .. g7-g6 .. i8-h8
+7. h9-h10 .. i7-j7 .. g6-g5 .. h8-g8
+8. h10-h11=Q .. j7-k7=N .. g5-g4=B .. g8-f8
+9. Nj1-h2 .. Na5-b7 .. Ne14-g13 .. f8-e8
+10. Ne1-f3 .. Na10-c9 .. Nj14-i12 .. e8-d8=R
+      `;
+      var res = utils.parseGameFromPGN(pgn);
+
+      test.bool(res['board'] != null).isTrue();
+      test.bool(res['moves'] != null).isTrue();
+      test.number(res['moves'].length).is(40);
+
+      // test promotion pieces
+      var board = res['board'];
+
+      test.bool(
+        board.getPieceRowCol(3, 7)
+        .equals(new board_util.Piece(board_util.kRedPlayer, board_util.QUEEN)))
+          .isTrue();
+
+      test.bool(
+        board.getPieceRowCol(10, 6)
+        .equals(new board_util.Piece(board_util.kYellowPlayer, board_util.BISHOP)))
+          .isTrue();
+
+      test.bool(
+        board.getPieceRowCol(6, 3)
+        .equals(new board_util.Piece(board_util.kGreenPlayer, board_util.ROOK)))
+          .isTrue();
+
+      test.bool(
+        board.getPieceRowCol(7, 10)
+        .equals(new board_util.Piece(board_util.kBluePlayer, board_util.KNIGHT)))
+          .isTrue();
+
+  });
+
 });

@@ -165,10 +165,10 @@ export const kGreenPlayer = new Player(PlayerColor.Green);
 export class Piece {
   constructor(player, pieceType) {
     if (!(player instanceof Player)) {
-      throw new Error('player is not Player');
+      throw new Error(`${player} is not Player`);
     }
     if (!(pieceType instanceof PieceType)) {
-      throw new Error('pieceType is not PieceType');
+      throw new Error(`${pieceType} is not PieceType`);
     }
     this.player = player;
     this.pieceType = pieceType;
@@ -181,6 +181,12 @@ export class Piece {
 
   toString() {
     return `Piece(${this.player}, ${this.pieceType})`;
+  }
+
+  equals(other) {
+    return (typeof this == typeof other
+        && this.player.equals(other.player)
+        && this.pieceType.equals(other.pieceType));
   }
 }
 
@@ -467,7 +473,7 @@ export class Board {
     const promotion_piece_type = move.getPromotionPieceType();
     if (promotion_piece_type != null) {
       // Handle promotions
-      this.setPiece(from, new Piece(turn_before.getColor(), PAWN));
+      this.setPiece(from, new Piece(turn_before, PAWN));
     } else {
       this.setPiece(from, this.getPiece(to));
     }
@@ -876,11 +882,11 @@ export class Board {
               rook_location = from.relative(0, -3);
             } else {
               squares_between = [
-                from.relative(0, -1),
-                from.relative(0, -2),
-                from.relative(0, -3),
+                from.relative(0, 1),
+                from.relative(0, 2),
+                from.relative(0, 3),
               ];
-              rook_location = from.relative(0, -4);
+              rook_location = from.relative(0, 4);
             }
             break;
           case GREEN:
