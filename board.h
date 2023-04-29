@@ -415,7 +415,7 @@ class Board {
   static std::shared_ptr<Board> CreateStandardSetup();
 //  bool operator==(const Board& other) const;
 //  bool operator!=(const Board& other) const;
-  const CastlingRights& GetCastlingRights(const Player& player) const;
+  const CastlingRights& GetCastlingRights(const Player& player);
 
   void MakeMove(const Move& move);
   void UndoMove();

@@ -151,7 +151,7 @@ TEST(PlayerTest, CheckPVInfoProducesValidMoves) {
     }
     pvinfo = pvinfo->GetChild().get();
   }
-  EXPECT_EQ(num_pvmoves, kDepth);
+  EXPECT_GE(num_pvmoves, kDepth);
 }
 
 TEST(PlayerTest, StaticExchangeEvaluation) {

@@ -227,4 +227,23 @@ describe('utils tests', function(){
 
   });
 
+  it('parse game from pgn with en-passants', function(){
+      var pgn = `
+[Variant "Teams"]
+[RuleVariants "EnPassant"]
+[CurrentMove "14"]
+[TimeControl "2 | 10"]
+
+1. d2-d3 .. b4-d4 .. k13-k12 .. m11-k11
+2. d3xc4 .. Ra4xc4 .. k12xl11 .. Rn11xl11
+3. k2-k3 .. b11-c11 .. d13-d11 .. m4-k4
+4. k3xl4 .. c11xd12
+      `;
+      var res = utils.parseGameFromPGN(pgn);
+
+      test.bool(res['board'] != null).isTrue();
+      test.bool(res['moves'] != null).isTrue();
+      test.number(res['moves'].length).is(14);
+  });
+
 });

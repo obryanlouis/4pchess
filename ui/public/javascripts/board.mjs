@@ -62,17 +62,22 @@ export const QUEEN = PieceType.Queen;
 export const KING = PieceType.King;
 
 export class PlayerColor {
-  static Red = new PlayerColor('red');
-  static Blue = new PlayerColor('blue');
-  static Yellow = new PlayerColor('yellow');
-  static Green = new PlayerColor('green');
+  static Red = new PlayerColor('red', 0);
+  static Blue = new PlayerColor('blue', 1);
+  static Yellow = new PlayerColor('yellow', 2);
+  static Green = new PlayerColor('green', 3);
 
-  constructor(name) {
+  constructor(name, int_value) {
     this.name = name;
+    this.int_value = int_value;
   }
 
   toString() {
     return `PlayerColor(${this.name})`;
+  }
+
+  toInt() {
+    return this.int_value;
   }
 
   equals(other) {
@@ -654,19 +659,23 @@ export class Board {
       } else {
         // En-passant
         if (other_piece.getPieceType().equals(PAWN)
-            && piece.getTeam() != other_piece.getTeam()) {
-          if (this.moves.length > 0) {
-            const last_move = this.moves.at(-1);
-            if (last_move.getTo().equals(to)
-                && last_move.manhattanDistance() == 2) {
-              const moved_from = last_move.getFrom();
+            && !piece.getTeam().equals(other_piece.getTeam())) {
+          var n_turns = (4 + piece.getColor().toInt() - other_piece.getColor().toInt()) % 4;
+          var other_player_move = null;
+          if (n_turns > 0 && n_turns < this.moves.length) {
+            other_player_move = this.moves.at(this.moves.length - n_turns);
+          }
+
+          if (other_player_move != null
+              && other_player_move.getTo().equals(to)
+              && other_player_move.manhattanDistance() == 2) {
+              const moved_from = other_player_move.getFrom();
               var delta_row = to.getRow() - moved_from.getRow();
               var delta_col = to.getCol() - moved_from.getCol();
               var enpassant_to = moved_from.relative(
                   delta_row / 2, delta_col / 2);
               this.addPawnMoves(moves, from, enpassant_to, piece.getColor(),
                   null, to, other_piece);
-            }
           }
         }
       }

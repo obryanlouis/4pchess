@@ -209,8 +209,8 @@ void Board::GetPawnMoves(
 
         int n_turns = (4 + piece.GetColor() - other_piece->GetColor()) % 4;
         const Move* other_player_move = nullptr;
-        if (n_turns < (int)moves_.size()) {
-          other_player_move = &moves_[moves_.size() - n_turns - 1];
+        if (n_turns > 0 && n_turns < (int)moves_.size()) {
+          other_player_move = &moves_[moves_.size() - n_turns];
         } else if (n_turns < 4) {
           const auto& enp_move = enp_.enp_moves[other_piece->GetColor()];
           if (enp_move.has_value()) {
@@ -1555,8 +1555,8 @@ std::ostream& operator<<(
   return os;
 }
 
-const CastlingRights& Board::GetCastlingRights(const Player& player) const {
-  return castling_rights_.at(player);
+const CastlingRights& Board::GetCastlingRights(const Player& player) {
+  return castling_rights_[player];
 }
 
 std::optional<CastlingType> Board::GetRookLocationType(
