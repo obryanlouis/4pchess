@@ -349,19 +349,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
     return std::make_pair(beta, std::nullopt);
   }
 
-  bool in_check = false;
-  if (options_.enable_late_move_pruning
-      || options_.enable_late_move_reduction
-      || options_.enable_fail_high_reductions
-      || options_.enable_check_extensions
-      || (options_.enable_null_move_pruning
-          && !is_root_node // not root
-          && !ss->excluded_move.has_value()
-          && !is_pv_node // not a pv node
-          && null_moves == 0 // last move wasn't null
-          && eval >= beta)) {
-    in_check = board.IsKingInCheck(player);
-  }
+  bool in_check = board.IsKingInCheck(player);
 
   // null move pruning
   if (options_.enable_null_move_pruning
@@ -691,7 +679,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
 
   int score = alpha;
   if (!has_legal_moves) {
-    if (!board.IsKingInCheck(board.GetTurn())) {
+    if (!in_check) {
       // stalemate
       score = std::min(beta, std::max(alpha, 0));
     } else {
@@ -731,11 +719,6 @@ void AlphaBetaPlayer::UpdateQuietStats(Stack* ss, const Move& move) {
 }
 
 namespace {
-
-constexpr int kPieceImbalanceTable[16] = {
-  0, -25, -45, -100, -135, -200, -700, -800,
-  -800, -800, -800, -800, -800, -800, -800, -800,
-};
 
 std::tuple<int, int> GetPieceStatistics(
     const std::vector<PlacedPiece>& pieces,
@@ -784,8 +767,15 @@ int AlphaBetaPlayer::Evaluate(Board& board, bool maximizing_player) {
 
       // Piece imbalance
       if (options_.enable_piece_imbalance) {
-        eval -= kPieceImbalanceTable[std::abs(std::get<0>(red_stats) - std::get<0>(yellow_stats))];
-        eval += kPieceImbalanceTable[std::abs(std::get<0>(blue_stats) - std::get<0>(green_stats))];
+        int red_piece_eval = board.PieceEvaluation(RED);
+        int yellow_piece_eval = board.PieceEvaluation(YELLOW);
+        int blue_piece_eval = board.PieceEvaluation(BLUE);
+        int green_piece_eval = board.PieceEvaluation(GREEN);
+
+        int ry_diff = std::abs(red_piece_eval - yellow_piece_eval);
+        eval -= ry_diff/3;
+        int bg_diff = std::abs(blue_piece_eval - green_piece_eval);
+        eval += bg_diff/3;
       }
 
       // Piece development

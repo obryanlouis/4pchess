@@ -379,6 +379,7 @@ class Board {
 
   Team TeamToPlay() const;
   int PieceEvaluation() const;
+  int PieceEvaluation(PlayerColor color) const;
   int MobilityEvaluation();
   int MobilityEvaluation(const Player& player);
   const Player& GetTurn() const { return turn_; }
@@ -518,8 +519,8 @@ class Board {
 
   void InitializeHash();
   void UpdatePieceHash(const Piece& piece, const BoardLocation& loc) {
-    hash_key_ ^= piece_hashes_[
-      static_cast<int>(piece.GetPieceType())][loc.GetRow()][loc.GetCol()];
+    hash_key_ ^= piece_hashes_[piece.GetColor()][piece.GetPieceType()]
+      [loc.GetRow()][loc.GetCol()];
   }
   void UpdateTurnHash(int turn) {
     hash_key_ ^= turn_hashes_[turn];
@@ -539,9 +540,10 @@ class Board {
   std::vector<Move> move_buffer_;
   int piece_evaluations_[6]; // one per piece type
   int piece_evaluation_ = 0;
+  int player_piece_evaluations_[4] = {0, 0, 0, 0}; // one per player
 
   int64_t hash_key_ = 0;
-  int64_t piece_hashes_[6][14][14];
+  int64_t piece_hashes_[4][6][14][14];
   int64_t turn_hashes_[4];
   BoardLocation king_locations_[4];
 };

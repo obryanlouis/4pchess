@@ -45,7 +45,7 @@ struct PlayerOptions {
   bool enable_killers = true;
   bool enable_king_safety = true;
   bool enable_late_move_pruning = true;
-  bool enable_transposition_table = true; // Only starts being better at around 20-30 sec/move.
+  bool enable_transposition_table = true;
   bool enable_check_extensions = true;
   bool enable_piece_imbalance = true;
   bool enable_piece_development = true;

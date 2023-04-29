@@ -1024,6 +1024,7 @@ void Board::MakeMove(const Move& move) {
     } else {
       piece_evaluation_ += value;
     }
+    player_piece_evaluations_[capture->GetColor()] -= value;
   }
 
   // Capture
@@ -1118,6 +1119,7 @@ void Board::UndoMove() {
     } else {
       piece_evaluation_ -= value;
     }
+    player_piece_evaluations_[capture->GetColor()] += value;
   }
 
   // Place back captured pieces
@@ -1193,6 +1195,10 @@ Team Board::TeamToPlay() const {
 
 int Board::PieceEvaluation() const {
   return piece_evaluation_;
+}
+
+int Board::PieceEvaluation(PlayerColor color) const {
+  return player_piece_evaluations_[color];
 }
 
 int Board::MobilityEvaluation(const Player& player) {
@@ -1287,6 +1293,7 @@ Board::Board(
     } else {
       piece_evaluation_ -= piece_evaluations_[static_cast<int>(piece_type)];
     }
+    player_piece_evaluations_[piece->GetColor()] += piece_evaluations_[piece_type];
     if (piece->GetPieceType() == KING) {
       king_locations_[color] = location;
     }
@@ -1318,10 +1325,12 @@ Board::Board(
   for (int color = 0; color < 4; color++) {
     turn_hashes_[color] = rand64();
   }
-  for (int piece_type = 0; piece_type < 6; piece_type++) {
-    for (int row = 0; row < 14; row++) {
-      for (int col = 0; col < 14; col++) {
-        piece_hashes_[piece_type][row][col] = rand64();
+  for (int color = 0; color < 4; color++) {
+    for (int piece_type = 0; piece_type < 6; piece_type++) {
+      for (int row = 0; row < 14; row++) {
+        for (int col = 0; col < 14; col++) {
+          piece_hashes_[color][piece_type][row][col] = rand64();
+        }
       }
     }
   }
