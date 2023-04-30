@@ -403,9 +403,13 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
 
   std::vector<Move> pseudo_legal_moves;
   std::optional<Move> pv_move = pvinfo.GetBestMove();
-  pseudo_legal_moves = MoveOrder(
-      board, maximizing_player, pv_move.has_value() ? pv_move : tt_move,
-      ss->killers);
+  if (!options_.enable_move_order) {
+    pseudo_legal_moves = board.GetPseudoLegalMoves();
+  } else {
+    pseudo_legal_moves = MoveOrder(
+        board, maximizing_player, pv_move.has_value() ? pv_move : tt_move,
+        ss->killers);
+  }
 
   bool partner_checked = false;
   if (options_.enable_late_move_reduction) {

@@ -14,7 +14,6 @@ TEST(Speed, BoardTest) {
   auto start = std::chrono::system_clock::now();
   auto board = Board::CreateStandardSetup();
   PlayerOptions options;
-  options.enable_futility_pruning = true;
   AlphaBetaPlayer player(options);
   player.EnableDebug(true);
 

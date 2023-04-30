@@ -230,8 +230,13 @@ void Board::GetPawnMoves(
           int delta_col = to.GetCol() - moved_from.GetCol();
           BoardLocation enpassant_to = moved_from.Relative(
               delta_row / 2, delta_col / 2);
-          AddPawnMoves(moves, from, enpassant_to, piece.GetColor(),
-                       nullptr, to, other_piece);
+          // there may be both en-passant and piece capture in the same move
+          const auto* existing = GetPiece(enpassant_to);
+          if (existing == nullptr
+              || existing->GetTeam() != piece.GetTeam()) {
+            AddPawnMoves(moves, from, enpassant_to, piece.GetColor(),
+                         existing, to, other_piece);
+          }
         }
 
       }
@@ -1018,6 +1023,8 @@ void Board::MakeMove(const Move& move) {
 
   const auto* piece = GetPiece(move.From());
 
+  // TODO: refactor this -- it should account for the case where we both capture
+  // and en-passant capture.
   const auto* capture = move.GetCapturePiece();
   if (capture != nullptr) {
     int value = piece_evaluations_[capture->GetPieceType()];
@@ -1103,6 +1110,11 @@ void Board::UndoMove() {
 
   // Move the piece back.
   const auto* piece = GetPiece(to);
+  if (piece == nullptr) {
+    std::cout << "piece == nullptr in UndoMove" << std::endl;
+    std::cout << *this << std::endl;
+    abort();
+  }
 
   RemovePiece(to);
   const auto& promotion_piece_type = move.GetPromotionPieceType();
@@ -1113,6 +1125,8 @@ void Board::UndoMove() {
     SetPiece(from, *piece);
   }
 
+  // TODO: refactor this -- it should account for the case where we both capture
+  // and en-passant capture.
   const auto* capture = move.GetCapturePiece();
   if (capture != nullptr) {
     int value = piece_evaluations_[capture->GetPieceType()];
