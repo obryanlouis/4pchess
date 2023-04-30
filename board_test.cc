@@ -5,9 +5,11 @@
 #include "gmock/gmock.h"
 
 #include "board.h"
+#include "utils.h"
 
 namespace chess {
 
+using Loc = BoardLocation;
 using ::testing::UnorderedElementsAre;
 
 TEST(BoardLocationTest, Properties) {
@@ -1495,6 +1497,57 @@ TEST(BoardTest, IsKingInCheckFalse) {
 //TEST(BoardTest, Enpassant) {
 //  auto board = 
 //}
+
+namespace {
+
+std::optional<Move> FindMove(
+    Board& board, const BoardLocation& from, const BoardLocation& to) {
+  for (const auto& move : board.GetPseudoLegalMoves()) {
+    if (move.From() == from
+        && move.To() == to) {
+      return move;
+    }
+  }
+  return std::nullopt;
+}
+
+}  // namespace
+
+TEST(BoardTest, MakeAndUndoMoves) {
+  auto board = ParseBoardFromFEN("R-0,0,0,0-1,1,1,1-1,0,1,1-0,0,0,0-2-x,x,x,yR,yN,1,yK,1,yB,yN,yR,x,x,x/x,x,x,yP,yP,yP,1,yP,yP,yP,yP,x,x,x/x,x,x,3,yP,4,x,x,x/bR,bP,10,gP,gR/bN,bP,10,gP,gN/bB,2,bP,8,gP,1/bQ,bP,9,gP,1,gK/bK,bP,bP,1,yQ,7,gP,1/bB,11,gP,gB/bN,1,bP,6,gB,2,gP,gN/3,bR,1,rP,6,gP,gR/x,x,x,4,rP,3,x,x,x/x,x,x,rP,rP,1,rP,1,rP,rP,rP,x,x,x/x,x,x,rR,1,rB,rQ,rK,1,rN,rR,x,x,x");
+
+  int64_t hash = board->HashKey();
+
+  board->MakeMove(FindMove(*board, Loc(12, 3), Loc(11, 3)).value());
+  board->MakeMove(FindMove(*board, Loc(6, 0), Loc(5, 1)).value());
+  board->MakeMove(FindMove(*board, Loc(0, 4), Loc(2, 5)).value());
+  board->MakeNullMove();
+  board->MakeMove(FindMove(*board, Loc(13, 6), Loc(10, 3)).value());
+  board->MakeMove(FindMove(*board, Loc(9, 2), Loc(10, 3)).value());
+  board->MakeMove(FindMove(*board, Loc(7, 4), Loc(9, 2)).value());
+
+  board->UndoMove();
+  board->UndoMove();
+  board->UndoMove();
+  board->UndoNullMove();
+  board->UndoMove();
+  board->UndoMove();
+  board->UndoMove();
+
+//  board->MakeMove(FindMove(*board, Loc(13, 6), Loc(10, 3)).value());
+//  board->MakeMove(FindMove(*board, Loc(6, 0), Loc(1, 5)).value());
+//  board->MakeMove(FindMove(*board, Loc(0, 6), Loc(1, 5)).value());
+//  board->MakeMove(FindMove(*board, Loc(9, 9), Loc(11, 7)).value());
+//  board->MakeMove(FindMove(*board, Loc(12, 3), Loc(11, 3)).value());
+//  board->MakeMove(FindMove(*board, Loc(9, 2), Loc(10, 3)).value());
+//  board->MakeMove(FindMove(*board, Loc(7, 4), Loc(9, 2)).value());
+//
+//  while (board->NumMoves() > 0) {
+//    board->UndoMove();
+//  }
+
+  EXPECT_EQ(hash, board->HashKey());
+}
 
 
 }  // namespace chess

@@ -209,7 +209,7 @@ void Board::GetPawnMoves(
 
         int n_turns = (4 + piece.GetColor() - other_piece->GetColor()) % 4;
         const Move* other_player_move = nullptr;
-        if (n_turns > 0 && n_turns < (int)moves_.size()) {
+        if (n_turns > 0 && n_turns <= (int)moves_.size()) {
           other_player_move = &moves_[moves_.size() - n_turns];
         } else if (n_turns < 4) {
           const auto& enp_move = enp_.enp_moves[other_piece->GetColor()];
@@ -220,7 +220,11 @@ void Board::GetPawnMoves(
 
         if (other_player_move != nullptr
             && other_player_move->To() == to
-            && other_player_move->ManhattanDistance() == 2) {
+            // TODO: Refactor this with 'enp' locations
+            && other_player_move->ManhattanDistance() == 2
+            && (other_player_move->From().GetRow() == other_player_move->To().GetRow()
+               || other_player_move->From().GetCol() == other_player_move->To().GetCol())
+            ) {
           const BoardLocation& moved_from = other_player_move->From();
           int delta_row = to.GetRow() - moved_from.GetRow();
           int delta_col = to.GetCol() - moved_from.GetCol();
@@ -977,9 +981,9 @@ void Board::SetPiece(
 
 void Board::RemovePiece(const BoardLocation& location) {
   const auto* piece = GetPiece(location);
+  assert(piece != nullptr);
   UpdatePieceHash(*piece, location);
   location_to_piece_[location.GetRow()][location.GetCol()] = nullptr;
-  assert(piece != nullptr);
   auto& placed_pieces = piece_list_[piece->GetColor()];
   for (auto it = placed_pieces.begin(); it != placed_pieces.end();) {
     const auto& placed_piece = *it;
@@ -1012,8 +1016,6 @@ void Board::MakeMove(const Move& move) {
   // 4. Promotion
   // 5. Castling (rights, rook move)
 
-  //std::cout << "MakeMove 1" << std::endl;
-
   const auto* piece = GetPiece(move.From());
 
   const auto* capture = move.GetCapturePiece();
@@ -1029,12 +1031,22 @@ void Board::MakeMove(const Move& move) {
 
   // Capture
   const auto* standard_capture = GetPiece(move.To());
-  //std::cout << "MakeMove 3" << std::endl;
   if (standard_capture != nullptr) {
     RemovePiece(move.To());
   }
 
-  //std::cout << "MakeMove 4" << std::endl;
+  if (piece == nullptr) {
+    std::cout
+      << "move"
+      << " from: " << move.From()
+      << " to: " << move.To()
+      << " turn: " << turn_
+      << std::endl;
+    std::cout << *this << std::endl;
+    abort();
+  }
+  assert(piece != nullptr);
+
   RemovePiece(move.From());
   const auto& promotion_piece_type = move.GetPromotionPieceType();
   if (promotion_piece_type.has_value()) { // Promotion
@@ -1042,20 +1054,9 @@ void Board::MakeMove(const Move& move) {
         move.To(),
         *kPieceSet[turn_.GetColor()][promotion_piece_type.value()]);
   } else { // Move
-    if (piece == nullptr) {
-      std::cout
-        << "move"
-        << " from: " << move.From()
-        << " to: " << move.To()
-        << " turn: " << turn_
-        << std::endl;
-      std::cout << *this << std::endl;
-    }
-    assert(piece != nullptr);
     SetPiece(move.To(), *piece);
   }
 
-  //std::cout << "MakeMove 5" << std::endl;
   // En-passant
   const auto& enpassant_location = move.GetEnpassantLocation();
   if (enpassant_location.has_value()) {
@@ -1065,6 +1066,7 @@ void Board::MakeMove(const Move& move) {
     const auto& rook_move = move.GetRookMove();
     if (rook_move.has_value()) {
       const auto* rook = GetPiece(rook_move->From());
+      assert(rook != nullptr);
       RemovePiece(rook_move->From());
       SetPiece(rook_move->To(), *rook);
     }
@@ -1076,7 +1078,6 @@ void Board::MakeMove(const Move& move) {
     }
   }
 
-  //std::cout << "MakeMove 6" << std::endl;
   int t = static_cast<int>(turn_.GetColor());
   UpdateTurnHash(t);
   UpdateTurnHash((t+1)%4);
@@ -1102,6 +1103,7 @@ void Board::UndoMove() {
 
   // Move the piece back.
   const auto* piece = GetPiece(to);
+
   RemovePiece(to);
   const auto& promotion_piece_type = move.GetPromotionPieceType();
   if (promotion_piece_type.has_value()) {
@@ -1138,8 +1140,7 @@ void Board::UndoMove() {
     const auto& rook_move = move.GetRookMove();
     if (rook_move.has_value()) {
       RemovePiece(rook_move->To());
-      SetPiece(rook_move->From(),
-               *kPieceSet[turn_before.GetColor()][ROOK]);
+      SetPiece(rook_move->From(), *kPieceSet[turn_before.GetColor()][ROOK]);
     }
 
     // Castling: rights update
@@ -1151,7 +1152,6 @@ void Board::UndoMove() {
 
   turn_ = turn_before;
   moves_.pop_back();
-
   int t = static_cast<int>(turn_.GetColor());
   UpdateTurnHash(t);
   UpdateTurnHash((t+1)%4);
@@ -1540,18 +1540,18 @@ std::ostream& operator<<(
     os << std::endl;
   }
 
-//  for (int player_color = 0; player_color < 4; ++player_color) {
-//    os << ToStr(static_cast<PlayerColor>(player_color)) << " pieces: "
-//        << ToStr(board.piece_list_[player_color])
-//        << std::endl;
-//  }
-
   os << "Turn: " << board.turn_ << std::endl;
 
   os << "All moves: " << std::endl;
   for (const auto& move : board.moves_) {
     os << move << std::endl;
   }
+//  os << "All pieces: " << std::endl;
+//  for (const auto& placed_pieces : board.piece_list_) {
+//    for (const auto& placed_piece : placed_pieces) {
+//      os << placed_piece.GetLocation() << " " << *placed_piece.GetPiece() << std::endl;
+//    }
+//  }
   return os;
 }
 

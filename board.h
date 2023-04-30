@@ -346,7 +346,7 @@ class PlacedPiece {
 
 struct EnpassantInitialization {
   // Indexed by PlayerColor
-  std::optional<Move> enp_moves[4];
+  std::optional<Move> enp_moves[4] = {std::nullopt, std::nullopt, std::nullopt, std::nullopt};
 };
 
 class Board {

@@ -10,6 +10,7 @@ cc_test(
     srcs = ["board_test.cc"],
     deps = [
         ":board",
+        ":utils",
         "@com_google_googletest//:gtest_main",
     ],
 )

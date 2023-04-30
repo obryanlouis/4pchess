@@ -419,6 +419,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
   bool has_legal_moves = false;
   int move_count = 0;
   int quiets = 0;
+
   for (int i = pseudo_legal_moves.size() - 1; i >= 0; i--) {
     std::optional<std::tuple<int, std::optional<Move>>> value_and_move_or;
     auto& move = pseudo_legal_moves[i];
@@ -455,6 +456,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
 
     if (board.CheckWasLastMoveKingCapture() != IN_PROGRESS) {
       board.UndoMove();
+
       alpha = beta; // fail hard
       //value = kMateValue;
       best_move = move;
@@ -555,6 +557,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
             singular_beta - 1, singular_beta, maximizing_player, expanded,
             deadline, singular_pvinfo, null_moves);
         if (!res_or.has_value()) {
+          board.UndoMove();
           return std::nullopt;
         }
         ss->excluded_move = std::nullopt;
