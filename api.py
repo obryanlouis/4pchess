@@ -20,6 +20,7 @@ ENDPOINTS={
 }
 
 # https://www.chess.com/variants-test
+# https://www.chess.com/variants
 TEST_SERVER_URL = 'https://variants.gcp-sandbox.chess-platform.com/bot'
 MAIN_SERVER_URL = 'https://variants.gcp-prod.chess.com/bot'
 
@@ -49,25 +50,6 @@ class Api:
         return response.json()
 
     def stream(self):
-        """
-        responses are like this
-        {'pgn4': '[GameNr "44993649"]
-                  [TimeControl "1+5"]
-                  [Variant "Teams"]
-                  [RuleVariants "Giveaway EnPassant DeadKingWalking"]
-                  [StartFen4 "4PC"]
-                  [Red "PhoenixZero1"]
-                  [RedElo "0"]
-                  [Blue "Futer7"]
-                  [BlueElo "0"]
-                  [Yellow "PhoenixZero2"]
-                  [YellowElo "0"]
-                  [Green "Futer6"]
-                  [GreenElo "0"]',
-        'fen4': '4PC',
-        'info': "it's your turn",
-        'clock': 59944}
-        """
         # get the stream data.
         url = urljoin(self.url, ENDPOINTS["stream"].format(self.token))
         return requests.get(url, headers = self.header, stream = True)

@@ -1,18 +1,28 @@
 """Server for playing on chess.com."""
 
+import argparse
 import re
 import json
 import api
 import time
 import uci_wrapper
 
+parser = argparse.ArgumentParser(
+    prog='Server',
+    description='Interacts with chess.com')
+def parse_bool(x):
+  return x.lower() in ['true', 't', '1']
+parser.add_argument('-prod', '--prod', type=parse_bool, required=False)
+args = parser.parse_args()
 
-_USE_TEST_SERVER = True
+
+_USE_PROD_SERVER = args.prod
 _BOT_NAME = 'Team Titan'
 _BOT_VERSION = 'v0.0.0'
-_API_KEY_FILENAME = 'api_key_prod.txt'
-_SERVER_URL = api.MAIN_SERVER_URL
-if _USE_TEST_SERVER:
+if _USE_PROD_SERVER:
+  _API_KEY_FILENAME = 'api_key_prod.txt'
+  _SERVER_URL = api.MAIN_SERVER_URL
+else:
   _API_KEY_FILENAME = 'api_key_test.txt'
   _SERVER_URL = api.TEST_SERVER_URL
 
@@ -20,7 +30,7 @@ if _USE_TEST_SERVER:
 def _read_api_token(filepath: str) -> str:
   """Read the API token from the given filepath."""
   with open(filepath) as f:
-    return f.read()
+    return f.read().strip()
 
 
 class Pgn4Info:

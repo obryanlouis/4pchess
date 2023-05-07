@@ -12,6 +12,7 @@
 
 #include "board.h"
 #include "player.h"
+#include "move_picker.h"
 
 namespace chess {
 
@@ -401,16 +402,6 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
     depth--;
   }
 
-  std::vector<Move> pseudo_legal_moves;
-  std::optional<Move> pv_move = pvinfo.GetBestMove();
-  if (!options_.enable_move_order) {
-    pseudo_legal_moves = board.GetPseudoLegalMoves();
-  } else {
-    pseudo_legal_moves = MoveOrder(
-        board, maximizing_player, pv_move.has_value() ? pv_move : tt_move,
-        ss->killers);
-  }
-
   bool partner_checked = false;
   if (options_.enable_late_move_reduction) {
     partner_checked = board.IsKingInCheck(GetPartner(player));
@@ -424,9 +415,25 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
   int move_count = 0;
   int quiets = 0;
 
-  for (int i = pseudo_legal_moves.size() - 1; i >= 0; i--) {
+  std::optional<Move> pv_move = pvinfo.GetBestMove();
+
+  MovePicker move_picker(
+    board,
+    pv_move,
+    ss->killers,
+    piece_evaluations_,
+    history_heuristic_,
+    piece_move_order_scores_,
+    options_.enable_move_order_checks);
+
+  while (true) {
+    Move* move_ptr = move_picker.GetNextMove();
+    if (move_ptr == nullptr) {
+      break;
+    }
+    Move& move = *move_ptr;
+
     std::optional<std::tuple<int, std::optional<Move>>> value_and_move_or;
-    auto& move = pseudo_legal_moves[i];
     if (move == ss->excluded_move) {
       continue;
     }
@@ -727,6 +734,16 @@ void AlphaBetaPlayer::UpdateQuietStats(Stack* ss, const Move& move) {
 
 namespace {
 
+//constexpr int kPieceImbalanceTable[16] = {
+//  0, -25, -45, -100, -135, -200, -700, -800,
+//  -800, -800, -800, -800, -800, -800, -800, -800,
+//};
+
+constexpr int kPieceImbalanceTable[16] = {
+  0, -50, -100, -300, -600, -700, -800, -800,
+  -800, -800, -800, -800, -800, -800, -800, -800,
+};
+
 std::tuple<int, int> GetPieceStatistics(
     const std::vector<PlacedPiece>& pieces,
     PlayerColor color) {
@@ -774,15 +791,20 @@ int AlphaBetaPlayer::Evaluate(Board& board, bool maximizing_player) {
 
       // Piece imbalance
       if (options_.enable_piece_imbalance) {
-        int red_piece_eval = board.PieceEvaluation(RED);
-        int yellow_piece_eval = board.PieceEvaluation(YELLOW);
-        int blue_piece_eval = board.PieceEvaluation(BLUE);
-        int green_piece_eval = board.PieceEvaluation(GREEN);
-
-        int ry_diff = std::abs(red_piece_eval - yellow_piece_eval);
-        eval -= ry_diff/3;
-        int bg_diff = std::abs(blue_piece_eval - green_piece_eval);
-        eval += bg_diff/3;
+//        if (options_.test) {
+        eval -= kPieceImbalanceTable[std::abs(std::get<0>(red_stats) - std::get<0>(yellow_stats))];
+        eval += kPieceImbalanceTable[std::abs(std::get<0>(blue_stats) - std::get<0>(green_stats))];
+//        } else {
+//          int red_piece_eval = board.PieceEvaluation(RED);
+//          int yellow_piece_eval = board.PieceEvaluation(YELLOW);
+//          int blue_piece_eval = board.PieceEvaluation(BLUE);
+//          int green_piece_eval = board.PieceEvaluation(GREEN);
+//
+//          int ry_diff = std::abs(red_piece_eval - yellow_piece_eval);
+//          eval -= ry_diff/3;
+//          int bg_diff = std::abs(blue_piece_eval - green_piece_eval);
+//          eval += bg_diff/3;
+//        }
       }
 
       // Piece development

@@ -17,17 +17,17 @@ class Board;
 
 constexpr int kNumPieceTypes = 6;
 
-enum PieceType {
+enum PieceType : int8_t {
   UNINITIALIZED_PIECE = -1,
   PAWN = 0, KNIGHT = 1, BISHOP = 2, ROOK = 3, QUEEN = 4, KING = 5,
 };
 
-enum PlayerColor {
+enum PlayerColor : int8_t {
   UNINITIALIZED_PLAYER = -1,
   RED = 0, BLUE = 1, YELLOW = 2, GREEN = 3,
 };
 
-enum Team {
+enum Team : int8_t {
   RED_YELLOW = 0, BLUE_GREEN = 1,
 };
 
@@ -100,10 +100,10 @@ class BoardLocation {
  public:
   BoardLocation() = default;
 
-  BoardLocation(int row, int col) : row_(row), col_(col) { }
+  BoardLocation(int8_t row, int8_t col) : row_(row), col_(col) { }
 
-  int GetRow() const { return row_; }
-  int GetCol() const { return col_; }
+  int8_t GetRow() const { return row_; }
+  int8_t GetCol() const { return col_; }
   bool operator==(const BoardLocation& other) const {
     return row_ == other.row_ && col_ == other.col_;
   }
@@ -111,7 +111,7 @@ class BoardLocation {
     return !(*this == other);
   }
 
-  BoardLocation Relative(int delta_rows, int delta_cols) const {
+  BoardLocation Relative(int8_t delta_rows, int8_t delta_cols) const {
     return BoardLocation(row_ + delta_rows, col_ + delta_cols);
   }
   friend std::ostream& operator<<(
@@ -120,8 +120,8 @@ class BoardLocation {
   std::string PrettyStr() const;
 
  private:
-  int row_ = 0;
-  int col_ = 0;
+  int8_t row_ = 0;
+  int8_t col_ = 0;
 };
 
 }  // namespace chess
@@ -159,6 +159,7 @@ class SimpleMove {
         && to_ == other.to_
         && piece_ == other.piece_;
   }
+
   bool operator!=(const SimpleMove& other) const {
     return !(*this == other);
   }
@@ -366,10 +367,6 @@ class Board {
 
   Board(Board&) = default;
 
-  // Returns (IN_PROGRESS, [move_list]) if the game is in progress.
-  // Returns (GameResult, []) if the game is over.
-//  std::pair<GameResult, std::vector<Move>> GetLegalMoves();
-
   std::vector<Move> GetPseudoLegalMoves();
   bool IsKingInCheck(const Player& player) const;
   bool IsKingInCheck(Team team) const;
@@ -561,3 +558,4 @@ Player GetPartner(const Player& player);
 
 
 #endif  // _BOARD_H_
+

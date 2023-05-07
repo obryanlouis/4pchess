@@ -47,12 +47,12 @@ struct PlayerOptions {
   bool enable_late_move_pruning = true;
   bool enable_transposition_table = true;
   bool enable_check_extensions = true;
-  bool enable_piece_imbalance = true;
   bool enable_piece_development = true;
 
   // generic test change
   bool test = true;
 
+  bool enable_piece_imbalance = false;  // needs work
   bool enable_fail_high_reductions = false;
   bool enable_see_move_ordering = false;
   bool enable_singular_extensions = false;

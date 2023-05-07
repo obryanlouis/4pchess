@@ -17,7 +17,10 @@ TEST(Speed, BoardTest) {
   AlphaBetaPlayer player(options);
   player.EnableDebug(true);
 
-  std::chrono::milliseconds time_limit(5000);
+  std::cout << "sizeof(Move): " << sizeof(Move) << std::endl;
+  std::cout << "sizeof(Board): " << sizeof(Board) << std::endl;
+
+  std::chrono::milliseconds time_limit(1000);
   auto res = player.MakeMove(*board, time_limit);
 
   auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(

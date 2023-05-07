@@ -22,6 +22,7 @@ cc_library(
     deps = [
         ":board",
         ":transposition_table",
+        ":move_picker",
     ],
 )
 
@@ -64,6 +65,7 @@ cc_binary(
     ],
 )
 
+
 cc_library(
     name = "utils",
     srcs = ["utils.cc"],
@@ -99,6 +101,15 @@ cc_library(
     name = "transposition_table",
     srcs = ["transposition_table.cc"],
     hdrs = ["transposition_table.h"],
+    deps = [
+        ":board",
+    ]
+)
+
+cc_library(
+    name = "move_picker",
+    srcs = ["move_picker.cc"],
+    hdrs = ["move_picker.h"],
     deps = [
         ":board",
     ]
