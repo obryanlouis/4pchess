@@ -67,6 +67,7 @@ struct Stack {
   Move killers[2];
   std::optional<Move> excluded_move;
   bool tt_pv = false;
+  int move_count = 0;
 };
 
 enum NodeType {

@@ -192,6 +192,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
   }
   (ss+1)->excluded_move = std::nullopt;
   (ss+2)->killers[0] = (ss+2)->killers[1] = Move();
+  ss->move_count = 0;
 
 
   // futility pruning
@@ -280,13 +281,20 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
     }
 
     bool delivers_check = false;
+
     bool lmr_cond1 =
       options_.enable_late_move_reduction
       && depth > 1
-      && !is_pv_node
-      && move_count > 2
-      && !move.IsCapture()
-      ;
+      // (this check is done before move_count is incremented, so use the next)
+      && (move_count+1) > 1 + (is_pv_node && ply <= 1)
+      && (!is_tt_pv
+          || !move.IsCapture()
+          || (isCutNode && (ss-1)->move_count > 1))
+         && !in_check
+         && !partner_checked
+         ;
+
+
     if (lmr_cond1 || options_.enable_late_move_pruning) {
       // this has to be called before the move is made
       delivers_check = move.DeliversCheck(board);
@@ -324,7 +332,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
 
     has_legal_moves = true;
 
-    move_count++;
+    ss->move_count = move_count++;
     if (quiet) {
       quiets++;
     }
@@ -379,9 +387,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
     }
 
     bool lmr = lmr_cond1
-        && !delivers_check
-        && !in_check
-        && !partner_checked;
+        && !delivers_check;
 
     if (lmr) {
       num_lmr_searches_++;
