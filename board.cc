@@ -1222,7 +1222,7 @@ int Board::MobilityEvaluation(const Player& player) {
   auto moves = GetPseudoLegalMoves();
   int player_mobility = (int) moves.size();
 
-  if (turn_.GetTeam() == RED_YELLOW) {
+  if (player.GetTeam() == RED_YELLOW) {
     mobility += player_mobility;
   } else {
     mobility -= player_mobility;
@@ -1384,7 +1384,7 @@ Player GetPartner(const Player& player) {
   }
 }
 
-inline Player GetPreviousPlayer(const Player& player) {
+Player GetPreviousPlayer(const Player& player) {
   switch (player.GetColor()) {
   case RED:
     return kGreenPlayer;
@@ -1527,7 +1527,7 @@ std::ostream& operator<<(
 
 std::ostream& operator<<(
     std::ostream& os, const BoardLocation& location) {
-  os << "Loc(" << location.GetRow() << ", " << location.GetCol() << ")";
+  os << "Loc(" << (int)location.GetRow() << ", " << (int)location.GetCol() << ")";
   return os;
 }
 

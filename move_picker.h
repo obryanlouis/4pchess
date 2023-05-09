@@ -22,6 +22,7 @@ class MovePicker {
 
   // If this returns nullptr then there are no more moves
   Move* GetNextMove();
+  int GetNumMoves() const { return moves_.size(); };
 
  private:
   struct Item {

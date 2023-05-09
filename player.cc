@@ -16,11 +16,6 @@
 
 namespace chess {
 
-// TODO: move these constants to a separate header file
-constexpr int kMaxQuiescenceDepth = 4;
-constexpr int kMaxQuiescenceMoves = 2;
-constexpr int kMateValue = 1000000'00;  // mate value (centipawns)
-
 AlphaBetaPlayer::AlphaBetaPlayer(std::optional<PlayerOptions> options) {
   if (options.has_value()) {
     options_ = options.value();
@@ -38,6 +33,13 @@ AlphaBetaPlayer::AlphaBetaPlayer(std::optional<PlayerOptions> options) {
   piece_move_order_scores_[ROOK] = 40;
   piece_move_order_scores_[QUEEN] = 50;
   piece_move_order_scores_[KING] = 0;
+
+  king_attacker_values_[PAWN] = 0;
+  king_attacker_values_[KNIGHT] = 60;
+  king_attacker_values_[BISHOP] = 80;
+  king_attacker_values_[ROOK] = 100;
+  king_attacker_values_[QUEEN] = 160;
+  king_attacker_values_[KING] = 0;
 
   if (options_.enable_transposition_table) {
     transposition_table_ = std::make_unique<TranspositionTable>(
@@ -108,141 +110,6 @@ int AlphaBetaPlayer::Reduction(int depth, int move_number) const {
 }
 
 
-std::optional<int> AlphaBetaPlayer::QuiescenceSearch(
-    Board& board,
-    int depth,
-    int alpha,
-    int beta,
-    bool maximizing_player,
-    const std::optional<
-        std::chrono::time_point<std::chrono::system_clock>>& deadline,
-    int msla) {
-  if (canceled_.load() || (deadline.has_value()
-        && std::chrono::system_clock::now() >= deadline.value())) {
-    // hit deadline
-    return std::nullopt;
-  }
-
-  num_nodes_++;
-  num_quiescence_nodes_++;
-
-  int eval = Evaluate(board, maximizing_player);
-  if (depth <= 0 || msla >= 4) {
-    return eval;
-  }
-
-  std::optional<int> value_or;
-  Player player = board.GetTurn();
-
-  bool checked = board.IsKingInCheck(player.GetTeam());
-
-  if (!checked) {
-    if (eval >= beta) {
-      return beta;
-    }
-    if (alpha < eval) {
-      alpha = eval;
-    }
-  }
-
-  // TODO: use a pv move here, maybe
-  std::vector<Move> pseudo_legal_moves = MoveOrder(
-      board, maximizing_player, std::nullopt, nullptr, true);
-
-  int turn_i = static_cast<int>(player.GetColor());
-  int curr_mob_score = player_mobility_scores_[turn_i];
-  int num_moves_examined = 0;
-
-  for (int i = pseudo_legal_moves.size() - 1;
-      i >= 0 && num_moves_examined < kMaxQuiescenceMoves; i--) {
-    auto& move = pseudo_legal_moves[i];
-    bool active = checked
-               || move.DeliversCheck(board)
-               || (move.GetStandardCapture() != nullptr
-                   // approx SEE >= 0
-//                   && piece_evaluations_[board.GetPiece(move.From())->GetPieceType()]
-//                      < piece_evaluations_[board.GetPiece(move.To())->GetPieceType()])
-                   && StaticExchangeEvaluationCapture(board, move) > 0)
-               ;
-
-    board.MakeMove(move);
-
-    if (board.CheckWasLastMoveKingCapture() != IN_PROGRESS) {
-      num_moves_examined++;
-      board.UndoMove();
-      if (options_.enable_mobility_evaluation) {
-        player_mobility_scores_[turn_i] = curr_mob_score; // reset
-      }
-
-      return kMateValue;
-    }
-
-    if (board.IsKingInCheck(player)) { // Illegal move
-      board.UndoMove();
-
-      continue;
-    }
-
-    if (!active) {
-      board.UndoMove();
-      continue;
-    }
-
-    if (options_.enable_mobility_evaluation) {
-      int player_mobility_score = board.MobilityEvaluation(player);
-
-      player_mobility_scores_[turn_i] = player_mobility_score;
-    }
-
-    value_or = QuiescenceSearch(
-        board, depth - 1, -beta, -alpha, !maximizing_player,
-        deadline, 0);
-
-    board.UndoMove();
-
-    num_moves_examined++;
-
-    if (!value_or.has_value()) {
-      return std::nullopt; // timeout
-    }
-
-    int score = -value_or.value();
-    if (score >= beta) {
-      if (options_.enable_mobility_evaluation) {
-        player_mobility_scores_[turn_i] = curr_mob_score; // reset
-      }
-
-      return beta;  // cutoff
-    }
-    if (score > alpha) {
-      alpha = score;
-    }
-  }
-
-  if (options_.enable_mobility_evaluation) {
-    player_mobility_scores_[turn_i] = curr_mob_score; // reset
-  }
-
-//  if (num_moves_examined == 0) {
-//    // if there were no captures to try, force a null move
-//    board.MakeNullMove();
-//
-//    value_or = QuiescenceSearch(board, depth - 1, -beta, -alpha,
-//        !maximizing_player, deadline, msla + 1);
-//
-//    board.UndoNullMove();
-//
-//    if (!value_or.has_value()) {
-//      return std::nullopt; // timeout
-//    }
-//    int score = -value_or.value();
-//    alpha = std::max(alpha, score);
-//  }
-
-  return alpha;
-}
-
-
 // Alpha-beta search with nega-max framework.
 // https://www.chessprogramming.org/Alpha-Beta
 // Returns (nega-max value, best move) pair.
@@ -264,6 +131,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
     PVInfo& pvinfo,
     int null_moves,
     bool isCutNode) {
+  depth = std::max(depth, 0);
   if (canceled_.load() || (deadline.has_value()
         && std::chrono::system_clock::now() >= deadline.value())) {
     return std::nullopt;
@@ -304,24 +172,13 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       is_tt_pv = tte->is_pv;
     }
   }
-
-  int eval = Evaluate(board, maximizing_player);
-
   Player player = board.GetTurn();
+
+  int eval = Evaluate(board, maximizing_player, alpha, beta);
+
   //Team team = player.GetTeam();
 
   if (depth <= 0 || ply >= kMaxPly) {
-
-    if (options_.enable_quiescence) {
-
-      num_nodes_--; // added in the next call
-      auto value_or = QuiescenceSearch(
-          board, kMaxQuiescenceDepth, alpha, beta, maximizing_player, deadline);
-      if (!value_or.has_value()) {
-        return std::nullopt; // timeout
-      }
-      eval = value_or.value();
-    }
 
     if (options_.enable_transposition_table) {
       transposition_table_->Save(board.HashKey(), 0, std::nullopt, eval, EXACT, is_pv_node);
@@ -342,8 +199,8 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       && !is_pv_node // not a pv node
       && !is_tt_pv // not TT pv
       && !is_root_node // not root
-      && depth < 9 // important for mate finding
-      && eval >= beta + 150 * depth
+      && depth < 5 // important for playing strength
+      && eval >= beta + 250 * depth
       && eval < 25000
       ) {
     num_futility_moves_pruned_++;
@@ -387,21 +244,6 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
     }
   }
 
-  // fail-high reductions
-  if (options_.enable_fail_high_reductions
-      && !is_pv_node // not a pv node
-      && !is_tt_pv // not TT pv
-      && !is_root_node // not root
-      && eval >= beta
-      && !in_check
-      && isCutNode
-      && depth > 10 // insure we are at a high enough depth
-      && beta > -2000
-      ) {
-    num_fail_high_reductions_++;
-    depth--;
-  }
-
   bool partner_checked = false;
   if (options_.enable_late_move_reduction) {
     partner_checked = board.IsKingInCheck(GetPartner(player));
@@ -411,12 +253,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
   int player_color = static_cast<int>(player.GetColor());
   int curr_mob_score = player_mobility_scores_[player_color];
 
-  bool has_legal_moves = false;
-  int move_count = 0;
-  int quiets = 0;
-
   std::optional<Move> pv_move = pvinfo.GetBestMove();
-
   MovePicker move_picker(
     board,
     pv_move,
@@ -425,6 +262,10 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
     history_heuristic_,
     piece_move_order_scores_,
     options_.enable_move_order_checks);
+
+  bool has_legal_moves = false;
+  int move_count = 0;
+  int quiets = 0;
 
   while (true) {
     Move* move_ptr = move_picker.GetNextMove();
@@ -483,29 +324,13 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
 
     has_legal_moves = true;
 
-//    // futility pruning
-//    if (options_.enable_futility_pruning
-//        && !is_pv_node // not a pv node
-//        && !is_tt_pv // not TT pv
-//        && !is_root_node // not root
-//        && depth == 1
-//        //&& eval >= beta + 150 * depth
-//        && eval + 150*depth < alpha
-//        && !move.IsCapture()
-//        ) {
-//      board.UndoMove();
-//      num_futility_moves_pruned_++;
-//      continue;
-//    }
-
     move_count++;
     if (quiet) {
       quiets++;
     }
 
     if (options_.enable_mobility_evaluation) {
-      int player_mobility_score = board.MobilityEvaluation(player);
-      player_mobility_scores_[player_color] = player_mobility_score;
+      player_mobility_scores_[player_color] = board.MobilityEvaluation(player);
     }
 
     bool is_pv_move = pv_move.has_value() && pv_move.value() == move;
@@ -543,56 +368,6 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
 //    }
 
     int e = 0;  // extension
-
-    if (ply < root_depth_ * 2) {
-      // Singular extension search
-      if (options_.enable_singular_extensions
-          && !is_root_node
-          && !ss->excluded_move.has_value()  // avoid recursive singular search
-          && tte != nullptr
-          && depth >= 3 + 2 * (is_pv_node && is_tt_pv)
-          && move == tt_move
-          && std::abs(tte->score) < kMateValue
-          && tte->bound == LOWER_BOUND
-          && tte->depth >= depth - 3
-          ) {
-
-        int singular_beta = tte->score;
-        int singular_depth = (depth - 1) / 2;
-
-        num_singular_extension_searches_++;
-        board.UndoMove();
-        ss->excluded_move = move;
-        PVInfo singular_pvinfo;
-        auto res_or = Search(ss, NonPV, board, ply, singular_depth,
-            singular_beta - 1, singular_beta, maximizing_player, expanded,
-            deadline, singular_pvinfo, null_moves);
-        if (!res_or.has_value()) {
-          board.UndoMove();
-          return std::nullopt;
-        }
-        ss->excluded_move = std::nullopt;
-
-        int value = std::get<0>(res_or.value());
-        if (value < singular_beta) {
-          num_singular_extensions_++;
-          e = 1;
-        } else if (singular_beta >= beta) {
-          // multi-cut pruning
-          return std::make_pair(beta, std::nullopt);
-        } else if (tte->score >= beta) {
-          e = -2 - !is_pv_node;
-        } else if (tte->score <= value) {
-          e = -1;
-        } else if (tte->score <= alpha) {
-          e = -1;
-        }
-
-        // Remake the move
-        board.MakeMove(move);
-      }
-
-    }
 
     // check extensions at early moves.
     if (options_.enable_check_extensions
@@ -766,7 +541,7 @@ std::tuple<int, int> GetPieceStatistics(
 
 }  // namespace
 
-int AlphaBetaPlayer::Evaluate(Board& board, bool maximizing_player) {
+int AlphaBetaPlayer::Evaluate(Board& board, bool maximizing_player, int alpha, int beta) {
   int eval; // w.r.t. RY team
   GameResult game_result = board.CheckWasLastMoveKingCapture();
   if (game_result != IN_PROGRESS) { // game is over
@@ -781,6 +556,29 @@ int AlphaBetaPlayer::Evaluate(Board& board, bool maximizing_player) {
     // Piece evaluation
     eval = board.PieceEvaluation();
 
+    // Mobility evaluation
+    if (options_.enable_mobility_evaluation) {
+      for (int i = 0; i < 4; i++) {
+        eval += player_mobility_scores_[i];
+      }
+    }
+
+    auto lazy_skip = [&](int margin) {
+      if (!options_.enable_lazy_eval) {
+        return false;
+      }
+      int re = maximizing_player ? eval : -eval; // returned eval
+      return re + margin <= alpha || re >= beta + margin;
+    };
+
+    int piece_development_margin = 400;
+    int king_safety_margin = 300;
+
+    if (lazy_skip(piece_development_margin + king_safety_margin)) {
+      num_lazy_eval_++;
+      return maximizing_player ? eval : -eval;
+    }
+
     if (options_.enable_piece_imbalance
         || options_.enable_piece_development) {
       const auto& piece_list = board.GetPieceList();
@@ -791,20 +589,19 @@ int AlphaBetaPlayer::Evaluate(Board& board, bool maximizing_player) {
 
       // Piece imbalance
       if (options_.enable_piece_imbalance) {
-//        if (options_.test) {
+
         eval -= kPieceImbalanceTable[std::abs(std::get<0>(red_stats) - std::get<0>(yellow_stats))];
         eval += kPieceImbalanceTable[std::abs(std::get<0>(blue_stats) - std::get<0>(green_stats))];
-//        } else {
+
 //          int red_piece_eval = board.PieceEvaluation(RED);
 //          int yellow_piece_eval = board.PieceEvaluation(YELLOW);
 //          int blue_piece_eval = board.PieceEvaluation(BLUE);
 //          int green_piece_eval = board.PieceEvaluation(GREEN);
-//
 //          int ry_diff = std::abs(red_piece_eval - yellow_piece_eval);
 //          eval -= ry_diff/3;
 //          int bg_diff = std::abs(blue_piece_eval - green_piece_eval);
 //          eval += bg_diff/3;
-//        }
+
       }
 
       // Piece development
@@ -815,77 +612,184 @@ int AlphaBetaPlayer::Evaluate(Board& board, bool maximizing_player) {
 
     }
 
-    // Mobility evaluation
-    if (options_.enable_mobility_evaluation) {
-      for (int i = 0; i < 4; i++) {
-        eval += player_mobility_scores_[i];
-      }
+    if (lazy_skip(king_safety_margin)) {
+      num_lazy_eval_++;
+      return maximizing_player ? eval : -eval;
     }
 
-    // King safety evaluation
-    if (options_.enable_king_safety) {
-      for (int color = 0; color < 4; ++color) {
-        int king_safety = 0;
-        Player player(static_cast<PlayerColor>(color));
-        Team team = player.GetTeam();
-        Team other = OtherTeam(team);
-        const auto king_location_or = board.GetKingLocation(player);
-        if (king_location_or.has_value()) {
-          const auto& king_location = king_location_or.value();
-          for (int delta_row = -1; delta_row <= 1; ++delta_row) {
-            for (int delta_col = -1; delta_col <= 1; ++delta_col) {
-              int row = king_location.GetRow() + delta_row;
-              int col = king_location.GetCol() + delta_col;
-              if ((row == 1 || row == 12 || col == 1 || col == 12)
-                  && board.IsLegalLocation(row, col)) {
-                const auto* piece = board.GetPiece(row, col);
-                BoardLocation piece_location(row, col);
-                if (piece != nullptr
-                    && piece->GetColor() == color
-                    && piece->GetPieceType() == PAWN) {
-                  king_safety += 30;
-                }
-                auto attackers = board.GetAttackers(other, piece_location);
-                if (attackers.size() > 1) {
-                  int value_of_attacks = 0;
-                  for (const auto& placed_piece : attackers) {
-                    switch(placed_piece.GetPiece()->GetPieceType()) {
-                    case KNIGHT:
-                      value_of_attacks += 20;
-                      break;
-                    case BISHOP:
-                      value_of_attacks += 30;
-                      break;
-                    case ROOK:
-                      value_of_attacks += 40;
-                      break;
-                    case QUEEN:
-                      value_of_attacks += 80;
-                      break;
-                    default:
-                      break;
-                    }
+//    if (options_.enable_lazy_eval) {
+////      if (depth == 0) {
+//      Player players[4];
+//      for (int color = 0; color < 4; color++) {
+//        players[color] = Player(static_cast<PlayerColor>(color));
+//      }
+//
+//      std::vector<std::vector<Move>> moves;
+//      moves.resize(4);
+//      if (options_.enable_mobility_evaluation
+//          || options_.enable_king_safety) {
+//        Player turn = board.GetTurn();
+//        for (int color = 0; color < 4; color++) {
+//          board.SetPlayer(players[color]);
+//          moves[color] = std::move(board.GetPseudoLegalMoves());
+//        }
+//        board.SetPlayer(turn);
+//      }
+//
+//      if (options_.enable_mobility_evaluation) {
+//        int mobility = 0;
+//        for (int color = 0; color < 4; ++color) {
+//          int player_mobility = (int) moves[color].size();
+//          if (color == RED || color == YELLOW) {
+//            mobility += player_mobility;
+//          } else {
+//            mobility -= player_mobility;
+//          }
+//        }
+//
+//        constexpr int kMobilityMultiplier = 5;
+//        mobility *= kMobilityMultiplier;
+//        eval += mobility;
+//      }
+//
+//      if (options_.enable_king_safety) {
+//        int king_attack_value[4] = {0, 0, 0, 0};
+//        int king_attackers[4] = {0, 0, 0, 0};
+//        BoardLocation king_locations[4];
+//        for (int color = 0; color < 4; ++color) {
+//          const auto king_location_or = board.GetKingLocation(players[color]);
+//          if (king_location_or.has_value()) {
+//            king_locations[color] = king_location_or.value();
+//          }
+//        }
+//
+//        // Find attacking moves
+//        for (int color = 0; color < 4; ++color) {
+//          for (const auto& move : moves[color]) {
+//            const auto* piece = board.GetPiece(move.From());
+//            assert(piece != nullptr);
+//            auto piece_type = piece->GetPieceType();
+//            if (piece_type != KING && piece_type != PAWN) {
+//              const auto& to = move.To();
+//              for (int dc = 1; dc <= 3; dc += 2) {
+//                int to_color = (color + dc) % 4;
+//                const auto& king_loc = king_locations[to_color];
+//                if (std::abs(to.GetRow() - king_loc.GetRow()) <= 2
+//                    && std::abs(to.GetCol() - king_loc.GetCol())) {
+//                  king_attack_value[to_color] += king_attacker_values_[piece_type];
+//                  king_attackers[to_color]++;
+//                }
+//              }
+//            }
+//          }
+//        }
+//
+//        // Compute king safety per player
+//        for (int color = 0; color < 4; ++color) {
+//          // attacking king zone
+//          int king_safety = -king_attack_value[color] * king_attack_weight_[king_attackers[color]] / 100;
+//          const auto& castling_rights = board.GetCastlingRights(players[color]);
+//          // pawn shield
+//          const auto& king_location = king_locations[color];
+//          for (int delta_row = -1; delta_row <= 1; ++delta_row) {
+//            for (int delta_col = -1; delta_col <= 1; ++delta_col) {
+//              int row = king_location.GetRow() + delta_row;
+//              int col = king_location.GetCol() + delta_col;
+//              if ((row == 1 || row == 12 || col == 1 || col == 12)
+//                  && board.IsLegalLocation(row, col)) {
+//                const auto* piece = board.GetPiece(row, col);
+//                if (piece != nullptr
+//                    && piece->GetColor() == color
+//                    && piece->GetPieceType() == PAWN) {
+//                  king_safety += 30;
+//                }
+//              }
+//            }
+//          }
+//          // encourages castling rights
+//          if (!castling_rights.Kingside() && !castling_rights.Queenside()) {
+//            king_safety -= 50;
+//          }
+//
+//          if (color == RED || color == YELLOW) {
+//            eval += king_safety;
+//          } else {
+//            eval -= king_safety;
+//          }
+//        }
+//      }
+//
+////      }
+//    } else {
+
+      // King safety evaluation (no lazy eval)
+      if (options_.enable_king_safety) {
+        for (int color = 0; color < 4; ++color) {
+          int king_safety = 0;
+          Player player(static_cast<PlayerColor>(color));
+          Team team = player.GetTeam();
+          Team other = OtherTeam(team);
+          const auto king_location_or = board.GetKingLocation(player);
+          if (king_location_or.has_value()) {
+            const auto& king_location = king_location_or.value();
+            for (int delta_row = -1; delta_row <= 1; ++delta_row) {
+              for (int delta_col = -1; delta_col <= 1; ++delta_col) {
+                int row = king_location.GetRow() + delta_row;
+                int col = king_location.GetCol() + delta_col;
+                if ((row == 1 || row == 12 || col == 1 || col == 12)
+                    && board.IsLegalLocation(row, col)) {
+                  const auto* piece = board.GetPiece(row, col);
+                  BoardLocation piece_location(row, col);
+                  if (piece != nullptr
+                      && piece->GetColor() == color
+                      && piece->GetPieceType() == PAWN) {
+                    king_safety += 30;
                   }
-                  king_safety -= value_of_attacks * king_attack_weight_[attackers.size()] / 100;
+                  auto attackers = board.GetAttackers(other, piece_location);
+                  if (attackers.size() > 1) {
+                    int value_of_attacks = 0;
+                    int attacker_colors[4] = {0, 0, 0, 0};
+                    for (const auto& placed_piece : attackers) {
+                      const auto* piece = placed_piece.GetPiece();
+                      int val = king_attacker_values_[piece->GetPieceType()];
+                      value_of_attacks += val;
+                      if (val > 0) {
+                        attacker_colors[piece->GetColor()]++;
+                      }
+                    }
+                    int num_attacker_colors = 0;
+                    for (int i = 0; i < 4; i++) {
+                      if (attacker_colors[i] > 0) {
+                        num_attacker_colors++;
+                      }
+                    }
+                    int attack_zone = value_of_attacks * king_attack_weight_[attackers.size()] / 100;
+                    if (num_attacker_colors > 1) {
+                      attack_zone += 50;
+                    }
+                    king_safety -= attack_zone;
+                  }
                 }
               }
             }
+            const auto& castling_rights = board.GetCastlingRights(player);
+            if (!castling_rights.Kingside() && !castling_rights.Queenside()) {
+              king_safety -= 50;
+            }
           }
-          const auto& castling_rights = board.GetCastlingRights(player);
-          if (!castling_rights.Kingside() && !castling_rights.Queenside()) {
-            king_safety -= 50;
-          }
-        }
 
-        if (color == RED || color == YELLOW) {
-          eval += king_safety;
-        } else {
-          eval -= king_safety;
+          if (color == RED || color == YELLOW) {
+            eval += king_safety;
+          } else {
+            eval -= king_safety;
+          }
         }
       }
-    }
+
+//    }
 
   }
+  // w.r.t. maximizing team
   return maximizing_player ? eval : -eval;
 }
 
@@ -895,39 +799,6 @@ void AlphaBetaPlayer::ResetHistoryHeuristic() {
 
 void AlphaBetaPlayer::ResetHistoryCounters() {
   std::memset(history_counter_, 0, (4*14*14*14*14) * sizeof(int) / sizeof(char));
-}
-
-std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::MTDF(
-    Board& board,
-    const std::optional<std::chrono::time_point<std::chrono::system_clock>>& deadline,
-    int depth,
-    int f) {
-  int g = f;
-  int upper_bound = kMateValue;
-  int lower_bound = -kMateValue;
-  bool maximizing_player = board.TeamToPlay() == RED_YELLOW;
-  Stack stack[kMaxPly + 10];
-  Stack* ss = stack + 7;
-
-  std::optional<std::tuple<int, std::optional<Move>>> move_and_value;
-  std::optional<Move> best_move;
-  while (lower_bound < upper_bound && (!deadline.has_value()
-        || std::chrono::system_clock::now() < deadline.value())) {
-    int b = std::max(g, lower_bound + 1);
-    move_and_value = Search(
-        ss, Root, board, 1, depth, b - 1, b, maximizing_player, 0,
-        deadline, pv_info_);
-    if (!move_and_value.has_value()) {
-      return std::nullopt;
-    }
-    g = std::get<0>(move_and_value.value());
-    if (g < b) {
-      upper_bound = g;
-    } else {
-      lower_bound = g;
-    }
-  }
-  return move_and_value;
 }
 
 void AlphaBetaPlayer::ResetMobilityScores(Board& board) {
@@ -979,17 +850,9 @@ std::optional<std::tuple<int, std::optional<Move>, int>> AlphaBetaPlayer::MakeMo
     std::optional<std::tuple<int, std::optional<Move>>> move_and_value;
     root_depth_ = next_depth;
 
-    if (options_.enable_mtdf) {
-      int f = 0;
-      if (res.has_value()) {
-        f = std::get<0>(res.value());
-      }
-      move_and_value = MTDF(board, deadline, next_depth, f);
-    } else {
-      move_and_value = Search(
-          ss, Root, board, 1, next_depth, alpha, beta, maximizing_player, 0,
-          deadline, pv_info_);
-    }
+    move_and_value = Search(
+        ss, Root, board, 1, next_depth, alpha, beta, maximizing_player, 0,
+        deadline, pv_info_);
 
     if (!move_and_value.has_value()) { // Hit deadline
       break;
@@ -1012,118 +875,6 @@ std::optional<std::tuple<int, std::optional<Move>, int>> AlphaBetaPlayer::MakeMo
   }
 
   return std::nullopt;
-}
-
-std::vector<Move> AlphaBetaPlayer::MoveOrder(
-    Board& board,
-    bool maximizing_player,
-    const std::optional<Move>& pvmove,
-    Move* killers,
-    bool quiescence) {
-
-  if (!options_.enable_move_order) {
-    return board.GetPseudoLegalMoves();
-  }
-
-  auto moves = board.GetPseudoLegalMoves();
-  // reorder the moves
-  std::vector<std::tuple<size_t, int>> pos_and_score;
-  pos_and_score.reserve(moves.size());
-
-  // move order:
-  // 1. PV or TT move
-  // 2. Good captures
-  // 3. Killers
-  // 4. Bad captures
-  // 5. Quiet moves
-  int kSep = 1000000;
-  int kPVMoveScore = 10 * kSep;
-  int kGoodCaptureScore = 9 * kSep;
-  int kKillerScore = 8 * kSep;
-  int kBadCaptureScore = 7 * kSep;
-  int kQuietMoveScore = 6 * kSep;
-
-  for (size_t i = 0; i < moves.size(); i++) {
-    auto& move = moves[i];
-    int score = 0;
-
-    const auto* capture = move.GetCapturePiece();
-    const auto* piece = board.GetPiece(move.From());
-
-    bool is_pv_move = pvmove.has_value() && move == pvmove.value();
-    if (pvmove.has_value() && move == pvmove.value()) {
-      score = kPVMoveScore;
-    } else if (killers != nullptr
-               && (killers[0] == move || killers[1] == move)) {
-      score = kKillerScore + (move == killers[0] ? 1 : 0);
-    } else if (move.IsCapture()) {
-
-      if (options_.enable_see_move_ordering) {
-
-        int see;
-        if (board.GetPiece(move.From())->GetPieceType() == PAWN) {
-          see = piece_evaluations_[capture->GetPieceType()];
-        } else {
-          see = StaticExchangeEvaluationCapture(board, move);
-        }
-        if (see >= 0) {
-          score = kGoodCaptureScore;
-        } else {
-          score = kBadCaptureScore;
-        }
-        score += see;
-
-      } else {
-
-        // We'd ideally use SEE here, if it weren't so expensive to compute.
-        int captured_val = piece_evaluations_[capture->GetPieceType()];
-        int attacker_val = piece_evaluations_[piece->GetPieceType()];
-        if (attacker_val <= captured_val) {
-          score = kGoodCaptureScore;
-        } else {
-          score = kBadCaptureScore;
-        }
-        score += captured_val - attacker_val/100;
-
-      }
-
-    } else {
-      score = kQuietMoveScore;
-      if (options_.enable_history_heuristic) {
-        const auto& from = move.From();
-        const auto& to = move.To();
-        score += history_heuristic_[from.GetRow()][from.GetCol()][to.GetRow()][to.GetCol()];
-      }
-    }
-
-    if (options_.enable_move_order_checks
-        && !is_pv_move
-        && move.DeliversCheck(board)) {
-      score += 10'00;
-    }
-
-    score += piece_move_order_scores_[piece->GetPieceType()];
-
-    pos_and_score.push_back(std::make_tuple(i, score));
-  }
-
-  struct {
-    bool operator()(std::tuple<size_t, int> a, std::tuple<size_t, int> b) {
-      return std::get<1>(a) < std::get<1>(b);
-    }
-  } customLess;
-
-  std::sort(pos_and_score.begin(), pos_and_score.end(), customLess);
-
-  std::vector<Move> reordered_moves;
-  reordered_moves.reserve(moves.size());
-  for (size_t i = 0; i < moves.size(); i++) {
-    const auto& p = pos_and_score[i];
-    size_t pos = std::get<0>(p);
-    reordered_moves.push_back(std::move(moves[pos]));
-  }
-
-  return reordered_moves;
 }
 
 int AlphaBetaPlayer::StaticExchangeEvaluationCapture(
@@ -1211,5 +962,48 @@ int PVInfo::GetDepth() const {
   }
   return 0;
 }
+
+int AlphaBetaPlayer::MobilityEvaluation(
+    Board& board, Player player) {
+  Player turn = board.GetTurn();
+  board.SetPlayer(player);
+  int mobility = 0;
+  auto moves = board.GetPseudoLegalMoves();
+  int piece_mobility[6] = {0, 0, 0, 0, 0, 0};
+  for (const auto& move : moves) {
+    const auto* piece = board.GetPiece(move.From());
+    piece_mobility[piece->GetPieceType()]++;
+  }
+  int player_mobility = 0;
+  for (int pt = 0; pt < 6; pt++) {
+    switch (static_cast<PieceType>(pt)) {
+    case QUEEN:
+      player_mobility += std::min(piece_mobility[pt], 12);
+      break;
+    case BISHOP:
+      player_mobility += std::min(piece_mobility[pt], 20);
+      break;
+    case ROOK:
+      player_mobility += std::min(piece_mobility[pt], 20);
+      break;
+    default:
+      player_mobility += piece_mobility[pt];
+      break;
+    }
+  }
+
+  if (player.GetTeam() == RED_YELLOW) {
+    mobility += player_mobility;
+  } else {
+    mobility -= player_mobility;
+  }
+
+  constexpr int kMobilityMultiplier = 5;
+  mobility *= kMobilityMultiplier;
+
+  board.SetPlayer(turn);
+  return mobility;
+}
+
 
 }  // namespace chess

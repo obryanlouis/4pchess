@@ -14,6 +14,7 @@ TEST(Speed, BoardTest) {
   auto start = std::chrono::system_clock::now();
   auto board = Board::CreateStandardSetup();
   PlayerOptions options;
+  options.enable_futility_pruning = true;
   AlphaBetaPlayer player(options);
   player.EnableDebug(true);
 
@@ -32,17 +33,8 @@ TEST(Speed, BoardTest) {
   if (options.enable_check_extensions) {
     std::cout << "#Check extensions: " << player.GetNumCheckExtensions() << std::endl;
   }
-  if (options.enable_fail_high_reductions) {
-    std::cout << "#Fail-high reductions: " << player.GetNumFailHighReductions() << std::endl;
-  }
   if (options.enable_late_move_pruning) {
     std::cout << "#LM pruned: " << player.GetNumLateMovesPruned() << std::endl;
-  }
-  if (options.enable_singular_extensions) {
-    std::cout << "#Singular searches: " << player.GetNumSingularExtensionSearches()
-      << std::endl;
-    std::cout << "#Singular extensions: " << player.GetNumSingularExtensions()
-      << std::endl;
   }
   if (options.enable_transposition_table) {
     std::cout << "#Cache hits: " << player.GetNumCacheHits() << std::endl;
@@ -65,6 +57,10 @@ TEST(Speed, BoardTest) {
   if (options.enable_futility_pruning) {
     std::cout << "#Futility moves pruned: " << player.GetNumFutilityMovesPruned()
       << std::endl;
+  }
+  int64_t lazy_eval = player.GetNumLazyEval();
+  if (lazy_eval > 0) {
+    std::cout << "#Lazy eval: " << lazy_eval << std::endl;
   }
 
   if (res.has_value() && std::get<1>(res.value()).has_value()) {

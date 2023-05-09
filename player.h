@@ -15,6 +15,8 @@
 
 namespace chess {
 
+constexpr int kMateValue = 1000000'00;  // mate value (centipawns)
+
 class PVInfo {
  public:
   PVInfo() = default;
@@ -48,18 +50,14 @@ struct PlayerOptions {
   bool enable_transposition_table = true;
   bool enable_check_extensions = true;
   bool enable_piece_development = true;
+  bool enable_lazy_eval = true;
+  bool enable_piece_imbalance = true;
+  bool enable_futility_pruning = true;
 
   // generic test change
   bool test = true;
 
-  bool enable_piece_imbalance = false;  // needs work
-  bool enable_fail_high_reductions = false;
-  bool enable_see_move_ordering = false;
-  bool enable_singular_extensions = false;
-  bool enable_quiescence = false;
   bool enable_history_leaf_pruning = false;
-  bool enable_futility_pruning = false;
-  bool enable_mtdf = false;  // performs worse?
 
   size_t transposition_table_size = kTranspositionTableSize;
   std::optional<int> max_search_depth;
@@ -84,10 +82,7 @@ class AlphaBetaPlayer {
       Board& board,
       std::optional<std::chrono::milliseconds> time_limit = std::nullopt,
       int max_depth = 20);
-  int Evaluate(Board& board, bool maximizing_player);
-  std::vector<Move> MoveOrder(
-      Board& board, bool maximizing_player, const std::optional<Move>& pvmove,
-      Move* killers = nullptr, bool quiescence = false);
+  int Evaluate(Board& board, bool maximizing_player, int alpha = -kMateValue, int beta = kMateValue);
   void CancelEvaluation() { canceled_ = true; }
   // NOTE: Should wait until evaluation is done before resetting this to true.
   void SetCanceled(bool canceled) { canceled_ = canceled; }
@@ -108,12 +103,6 @@ class AlphaBetaPlayer {
       PVInfo& pv_info,
       int null_moves = 0,
       bool isCutNode = false);
-
-  std::optional<std::tuple<int, std::optional<Move>>> MTDF(
-      Board& board,
-      const std::optional<std::chrono::time_point<std::chrono::system_clock>>& deadline,
-      int depth,
-      int f);
 
   std::optional<int> QuiescenceSearch(
       Board& board,
@@ -140,7 +129,8 @@ class AlphaBetaPlayer {
   }
   int64_t GetNumLateMovesPruned() { return num_lm_pruned_; }
   int64_t GetNumFailHighReductions() { return num_fail_high_reductions_; }
-  int64_t GetNumCheckExtensions() { return num_check_extensions_++; }
+  int64_t GetNumCheckExtensions() { return num_check_extensions_; }
+  int64_t GetNumLazyEval() { return num_lazy_eval_; }
 
 //  ~AlphaBetaPlayer() {
 //    if (hash_table_ != nullptr) {
@@ -191,13 +181,14 @@ class AlphaBetaPlayer {
   int64_t num_lm_pruned_ = 0;
   int64_t num_fail_high_reductions_ = 0;
   int64_t num_check_extensions_ = 0;
+  int64_t num_lazy_eval_ = 0;
 
   PVInfo pv_info_;
   std::atomic<bool> canceled_ = false;
   int piece_evaluations_[6];
   int piece_move_order_scores_[6];
   PlayerOptions options_;
-  int player_mobility_scores_[4];
+  int player_mobility_scores_[4] = {0, 0, 0, 0};
   int location_evaluations_[14][14];
 
   //HashTableEntry* hash_table_ = nullptr;
@@ -222,6 +213,7 @@ class AlphaBetaPlayer {
   int threat_by_king_ = 24;
   int threat_hanging_ = 72;
   int weak_queen_protection_ = 12;
+  int king_attacker_values_[6];
 };
 
 }  // namespace chess
