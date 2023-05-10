@@ -21,7 +21,7 @@ TEST(Speed, BoardTest) {
   std::cout << "sizeof(Move): " << sizeof(Move) << std::endl;
   std::cout << "sizeof(Board): " << sizeof(Board) << std::endl;
 
-  std::chrono::milliseconds time_limit(1000);
+  std::chrono::milliseconds time_limit(10000);
   auto res = player.MakeMove(*board, time_limit);
 
   auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(

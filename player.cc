@@ -194,7 +194,6 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
   (ss+2)->killers[0] = (ss+2)->killers[1] = Move();
   ss->move_count = 0;
 
-
   // futility pruning
   if (options_.enable_futility_pruning
       && !is_pv_node // not a pv node
@@ -209,6 +208,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
   }
 
   bool in_check = board.IsKingInCheck(player);
+  bool partner_checked = board.IsKingInCheck(GetPartner(player));
 
   // null move pruning
   if (options_.enable_null_move_pruning
@@ -218,6 +218,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       && null_moves == 0 // last move wasn't null
       && !in_check // not in check
       && eval >= beta
+      && !partner_checked
       ) {
     num_null_moves_tried_++;
     board.MakeNullMove();
@@ -243,11 +244,6 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
 
       return std::make_tuple(beta, std::nullopt);
     }
-  }
-
-  bool partner_checked = false;
-  if (options_.enable_late_move_reduction) {
-    partner_checked = board.IsKingInCheck(GetPartner(player));
   }
 
   std::optional<Move> best_move;
@@ -290,8 +286,8 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       && (!is_tt_pv
           || !move.IsCapture()
           || (isCutNode && (ss-1)->move_count > 1))
-         && !in_check
-         && !partner_checked
+      && !in_check
+      && !partner_checked
          ;
 
 
@@ -300,7 +296,8 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       delivers_check = move.DeliversCheck(board);
     }
 
-    bool quiet = !in_check && !move.IsCapture() && !delivers_check;
+    bool quiet = !in_check && !move.IsCapture() && !delivers_check
+      ;
 
     if (options_.enable_late_move_pruning
         && quiet
