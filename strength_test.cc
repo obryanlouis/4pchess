@@ -13,7 +13,7 @@ namespace chess {
 constexpr int kNumGames = 100;
 constexpr int kMaxMovesPerGame = 100;
 constexpr int kNumThreads = 12;
-constexpr int kMoveTimeLimitMs = 5000;
+constexpr int kMoveTimeLimitMs = 12000;
 
 class StrengthTest {
  public:

@@ -574,7 +574,6 @@ $('#redo_move').click(function() {
   maybeRedoMove();
 });
 
-//var request_in_flight = false;
 var requests_in_flight = {}; // key -> requested search depth
 var last_board_key = null;
 //var next_depth = 1;
@@ -619,7 +618,6 @@ function getBoardKey() {
 }
 
 function handleResponse(req_key, req_depth, data) {
-  //request_in_flight = false;
   if (req_key in requests_in_flight) {
     var depth = requests_in_flight[req_key];
     if (depth <= req_depth) {
@@ -627,13 +625,13 @@ function handleResponse(req_key, req_depth, data) {
     }
   }
   if (data != null && 'evaluation' in data) {
+    data['req_depth'] = req_depth;
     board_key_to_eval[req_key] = data;
     displayBoard();
   }
 }
 
 function handleError(req_key, req_depth, error) {
-  //request_in_flight = false;
   if (req_key in requests_in_flight) {
     var depth = requests_in_flight[req_key];
     if (depth <= req_depth) {
@@ -657,11 +655,9 @@ function requestBoardEvaluation() {
 
     var search_depth = 1;
     if (secs_per_move != null && max_search_depth != null) {
-      // TODO: Keep requesting depth incrementally but cache the C++ AlphaBetaPlayer.
-      // This requires trickier logic in routes/index.js and routes/eval_board.js.
       search_depth = max_search_depth;
-    } else if (eval_results != null && 'search_depth' in eval_results) {
-      search_depth = eval_results['search_depth'] + 1;
+    } else if (eval_results != null && 'req_depth' in eval_results) {
+      search_depth = eval_results['req_depth'] + 1;
     }
 
     var board_state = getBoardState();

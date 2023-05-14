@@ -115,3 +115,14 @@ cc_library(
     ]
 )
 
+cc_test(
+    name = "regression_test",
+    srcs = ["regression_test.cc"],
+    deps = [
+        ":board",
+        ":player",
+        ":utils",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+

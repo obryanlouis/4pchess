@@ -52,12 +52,9 @@ struct PlayerOptions {
   bool enable_piece_development = true;
   bool enable_lazy_eval = true;
   bool enable_piece_imbalance = true;
-  bool enable_futility_pruning = true;
 
   // generic test change
-  bool test = true;
-
-  bool enable_history_leaf_pruning = false;
+  bool test = false;
 
   size_t transposition_table_size = kTranspositionTableSize;
   std::optional<int> max_search_depth;
@@ -165,9 +162,10 @@ class AlphaBetaPlayer {
  private:
 
   void ResetHistoryHeuristic();
-  void ResetHistoryCounters();
   void UpdateQuietStats(Stack* ss, const Move& move);
   int MobilityEvaluation(Board& board, Player turn);
+  bool HasShield(Board& board, PlayerColor color, const BoardLocation& king_loc);
+  bool OnBackRank(const BoardLocation& king_loc);
 
   int64_t num_nodes_ = 0; // debugging
   int64_t num_quiescence_nodes_ = 0;
@@ -200,12 +198,8 @@ class AlphaBetaPlayer {
   // https://www.chessprogramming.org/History_Heuristic
   // (from_row, from_col, to_row, to_col)
   int history_heuristic_[14][14][14][14];
-  // counters for each historical move (number of times encountered)
-  // (player_color, from_row, from_col, to_row, to_col)
-  int history_counter_[4][14][14][14][14];
   int reductions_[kMaxPly];
   int root_depth_;
-  int late_move_pruning_[20];
 
   // For evaluation
   int king_attack_weight_[30];
