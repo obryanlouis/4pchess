@@ -18,11 +18,14 @@ class MovePicker {
     int piece_evaluations[6],
     int history_heuristic[14][14][14][14],
     int piece_move_order_scores[6],
-    bool enable_move_order_checks);
+    bool enable_move_order_checks,
+    Move* buffer,
+    size_t buffer_size);
 
   // If this returns nullptr then there are no more moves
   Move* GetNextMove();
-  int GetNumMoves() const { return moves_.size(); };
+  //int GetNumMoves() const { return moves_.size(); };
+  int GetNumMoves() const { return num_moves_; };
 
  private:
   struct Item {
@@ -33,7 +36,9 @@ class MovePicker {
   };
 
   Board* board_ = nullptr;
-  std::vector<Move> moves_;
+  //std::vector<Move> moves_;
+  Move* moves_ = nullptr;
+  size_t num_moves_ = 0;
   uint8_t stage_ = 0;
   uint8_t stage_idx_ = 0;
   std::vector<std::vector<Item>> stages_;

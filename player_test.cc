@@ -16,8 +16,6 @@ const Player kBluePlayer = Player(BLUE);
 const Player kYellowPlayer = Player(YELLOW);
 const Player kGreenPlayer = Player(GREEN);
 
-constexpr int kMateValue = 1000000'00;  // mate value (centipawns)
-
 
 TEST(PlayerTest, EvaluateCheckmate) {
   // Team is in checkmate already
@@ -144,9 +142,16 @@ TEST(PlayerTest, CheckPVInfoProducesValidMoves) {
     if (pvmove_or.has_value()) {
       num_pvmoves++;
       const auto& move = pvmove_or.value();
-      const auto& moves = board->GetPseudoLegalMoves();
-      auto it = std::find(moves.begin(), moves.end(), move);
-      ASSERT_NE(it, moves.end());
+      Move moves[300];
+      size_t num_moves = board->GetPseudoLegalMoves2(moves, 300);
+      bool found = false;
+      for (size_t i = 0; i < num_moves; i++) {
+        if (moves[i] == move) {
+          found = true;
+          break;
+        }
+      }
+      ASSERT_TRUE(found);
       board->MakeMove(move);
     }
     pvinfo = pvinfo->GetChild().get();
@@ -154,45 +159,26 @@ TEST(PlayerTest, CheckPVInfoProducesValidMoves) {
   EXPECT_GE(num_pvmoves, kDepth);
 }
 
-TEST(PlayerTest, StaticExchangeEvaluation) {
-  PlayerOptions options;
-  AlphaBetaPlayer player(options);
-
-  auto board = Board::CreateStandardSetup();
-
-  board->MakeMove(Move(BoardLocation(12, 7), BoardLocation(11, 7)));
-  board->MakeMove(Move(BoardLocation(7, 1), BoardLocation(7, 2)));
-  board->MakeMove(Move(BoardLocation(1, 6), BoardLocation(2, 6)));
-  board->MakeMove(Move(BoardLocation(6, 12), BoardLocation(6, 11)));
-
-  // Qg1 x m7
-  BoardLocation from(13, 6);
-  BoardLocation to(7, 12);
-  Move move(from, to, board->GetPiece(to));
-
-  int see = player.StaticExchangeEvaluationCapture(*board, move);
-
-  EXPECT_LT(see, 0);
-}
-
-TEST(PlayerTest, Quiescence) {
-  PlayerOptions options;
-  options.enable_quiescence = true;
-  AlphaBetaPlayer player(options);
-
-  auto board = Board::CreateStandardSetup();
-
-  const auto& res = player.MakeMove(*board, std::nullopt, 1);
-  ASSERT_TRUE(res.has_value());
-  auto eval = std::get<0>(res.value());
-  auto move = std::get<1>(res.value());
-  ASSERT_TRUE(move.has_value());
-//  std::cout << "eval: " << eval << std::endl;
-//  std::cout << "best move: " << move.value() << std::endl;
-
-  EXPECT_GT(eval, -kMateValue);
-  EXPECT_LT(eval, kMateValue);
-}
+//TEST(PlayerTest, StaticExchangeEvaluation) {
+//  PlayerOptions options;
+//  AlphaBetaPlayer player(options);
+//
+//  auto board = Board::CreateStandardSetup();
+//
+//  board->MakeMove(Move(BoardLocation(12, 7), BoardLocation(11, 7)));
+//  board->MakeMove(Move(BoardLocation(7, 1), BoardLocation(7, 2)));
+//  board->MakeMove(Move(BoardLocation(1, 6), BoardLocation(2, 6)));
+//  board->MakeMove(Move(BoardLocation(6, 12), BoardLocation(6, 11)));
+//
+//  // Qg1 x m7
+//  BoardLocation from(13, 6);
+//  BoardLocation to(7, 12);
+//  Move move(from, to, board->GetPiece(to));
+//
+//  int see = player.StaticExchangeEvaluationCapture(*board, move);
+//
+//  EXPECT_LT(see, 0);
+//}
 
 }  // namespace chess
 

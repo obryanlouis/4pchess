@@ -10,11 +10,21 @@
 namespace chess {
 namespace {
 
+TEST(Speed, SizeTest) {
+  std::cout << "sizeof(Move): " << sizeof(Move) << std::endl;
+  std::cout << "sizeof(BoardLocation): " << sizeof(BoardLocation) << std::endl;
+  std::cout << "sizeof(Piece*): " << sizeof(Piece*) << std::endl;
+  std::cout << "sizeof(Piece): " << sizeof(Piece) << std::endl;
+  std::cout << "sizeof(std::optional<PieceType>): " << sizeof(std::optional<PieceType>) << std::endl;
+  std::cout << "sizeof(std::optional<SimpleMove>): " << sizeof(std::optional<SimpleMove>) << std::endl;
+  std::cout << "sizeof(std::optional<CastlingRights>): " << sizeof(std::optional<CastlingRights>) << std::endl;
+  std::cout << "sizeof(std::optional<bool>): " << sizeof(std::optional<bool>) << std::endl;
+}
+
 TEST(Speed, BoardTest) {
   auto start = std::chrono::system_clock::now();
   auto board = Board::CreateStandardSetup();
   PlayerOptions options;
-  options.enable_futility_pruning = true;
   AlphaBetaPlayer player(options);
   player.EnableDebug(true);
 
@@ -52,10 +62,6 @@ TEST(Speed, BoardTest) {
     std::cout << "#Null moves tried: " << player.GetNumNullMovesTried()
       << std::endl;
     std::cout << "#Null moves pruned: " << player.GetNumNullMovesPruned()
-      << std::endl;
-  }
-  if (options.enable_futility_pruning) {
-    std::cout << "#Futility moves pruned: " << player.GetNumFutilityMovesPruned()
       << std::endl;
   }
   int64_t lazy_eval = player.GetNumLazyEval();

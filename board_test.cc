@@ -39,90 +39,6 @@ TEST(PlayerTest, Properties) {
   EXPECT_NE(red, blue);
 }
 
-//TEST(Move, Properties) {
-//  BoardLocation loc_a(5, 5);
-//  BoardLocation loc_b(7, 8);
-//  BoardLocation loc_c(6, 0);
-//
-//  Piece piece1(Player(RED), KNIGHT);
-//  Piece piece2(Player(RED), PAWN);
-//  Piece piece3(Player(BLUE), PAWN);
-//  Piece piece4(Player(RED), ROOK);
-//
-//  CastlingRights initial_castling_rights(true, true);
-//  CastlingRights castling_rights(false, false);
-//
-//  SimpleMove rook_move(loc_a, loc_b, piece4);
-//
-//  // Normal move
-//  Move move1(loc_a, loc_b);
-//  // Capture
-//  Move move2(loc_a, loc_b, piece2);
-//  // Promotion
-//  Move move3(loc_a, loc_b, piece2, std::nullopt, std::nullopt, QUEEN);
-//  // En passant
-//  Move move4(loc_a, loc_b, std::nullopt, loc_c, piece3, std::nullopt);
-//  // Castle
-//  Move move5(loc_a, loc_b, rook_move, initial_castling_rights, castling_rights);
-//
-//  EXPECT_EQ(move1, move1);
-//  EXPECT_NE(move1, move2);
-//  EXPECT_NE(move1, move3);
-//  EXPECT_NE(move1, move4);
-//  EXPECT_NE(move1, move5);
-//
-//  EXPECT_EQ(move1.From(), loc_a);
-//  EXPECT_EQ(move1.To(), loc_b);
-//  EXPECT_EQ(move1.GetStandardCapture(), std::nullopt);
-//  EXPECT_EQ(move1.GetEnpassantLocation(), std::nullopt);
-//  EXPECT_EQ(move1.GetEnpassantCapture(), std::nullopt);
-//  EXPECT_EQ(move1.GetRookMove(), std::nullopt);
-//  EXPECT_EQ(move1.GetInitialCastlingRights(), std::nullopt);
-//  EXPECT_EQ(move1.GetCastlingRights(), std::nullopt);
-//  EXPECT_EQ(move1.GetPromotionPieceType(), std::nullopt);
-//
-//  EXPECT_EQ(move2.From(), loc_a);
-//  EXPECT_EQ(move2.To(), loc_b);
-//  EXPECT_EQ(move2.GetStandardCapture(), piece2);
-//  EXPECT_EQ(move2.GetEnpassantLocation(), std::nullopt);
-//  EXPECT_EQ(move2.GetEnpassantCapture(), std::nullopt);
-//  EXPECT_EQ(move2.GetRookMove(), std::nullopt);
-//  EXPECT_EQ(move2.GetInitialCastlingRights(), std::nullopt);
-//  EXPECT_EQ(move2.GetCastlingRights(), std::nullopt);
-//  EXPECT_EQ(move2.GetPromotionPieceType(), std::nullopt);
-//
-//  EXPECT_EQ(move3.From(), loc_a);
-//  EXPECT_EQ(move3.To(), loc_b);
-//  EXPECT_EQ(move3.GetStandardCapture(), piece2);
-//  EXPECT_EQ(move3.GetEnpassantLocation(), std::nullopt);
-//  EXPECT_EQ(move3.GetEnpassantCapture(), std::nullopt);
-//  EXPECT_EQ(move3.GetRookMove(), std::nullopt);
-//  EXPECT_EQ(move3.GetInitialCastlingRights(), std::nullopt);
-//  EXPECT_EQ(move3.GetCastlingRights(), std::nullopt);
-//  EXPECT_EQ(move3.GetPromotionPieceType(), QUEEN);
-//
-//  EXPECT_EQ(move4.From(), loc_a);
-//  EXPECT_EQ(move4.To(), loc_b);
-//  EXPECT_EQ(move4.GetStandardCapture(), std::nullopt);
-//  EXPECT_EQ(move4.GetEnpassantLocation(), loc_c);
-//  EXPECT_EQ(move4.GetEnpassantCapture(), piece3);
-//  EXPECT_EQ(move4.GetRookMove(), std::nullopt);
-//  EXPECT_EQ(move4.GetInitialCastlingRights(), std::nullopt);
-//  EXPECT_EQ(move4.GetCastlingRights(), std::nullopt);
-//  EXPECT_EQ(move4.GetPromotionPieceType(), std::nullopt);
-//
-//  EXPECT_EQ(move5.From(), loc_a);
-//  EXPECT_EQ(move5.To(), loc_b);
-//  EXPECT_EQ(move5.GetStandardCapture(), std::nullopt);
-//  EXPECT_EQ(move5.GetEnpassantLocation(), std::nullopt);
-//  EXPECT_EQ(move5.GetEnpassantCapture(), std::nullopt);
-//  EXPECT_EQ(move5.GetRookMove(), rook_move);
-//  EXPECT_EQ(move5.GetInitialCastlingRights(), initial_castling_rights);
-//  EXPECT_EQ(move5.GetCastlingRights(), castling_rights);
-//  EXPECT_EQ(move5.GetPromotionPieceType(), std::nullopt);
-//
-//}
-
 //TEST(BoardTest, GetLegalMoves_Pawn) {
 //  // Move (allowed, blocked, outside board bounds, initial)
 //  // En-passant (same/other team, non/last move, locations, moved only once)
@@ -1502,7 +1418,10 @@ namespace {
 
 std::optional<Move> FindMove(
     Board& board, const BoardLocation& from, const BoardLocation& to) {
-  for (const auto& move : board.GetPseudoLegalMoves()) {
+  Move moves[300];
+  size_t num_moves = board.GetPseudoLegalMoves2(moves, 300);
+  for (size_t i = 0; i < num_moves; i++) {
+    const auto& move = moves[i];
     if (move.From() == from
         && move.To() == to) {
       return move;
@@ -1547,6 +1466,80 @@ TEST(BoardTest, MakeAndUndoMoves) {
 //  }
 
   EXPECT_EQ(hash, board->HashKey());
+}
+
+namespace {
+
+Move MakeMove(const Board& board, BoardLocation from, BoardLocation to) {
+  return Move(from, to, board.GetPiece(to));
+}
+
+}  // namespace
+
+TEST(BoardTest, DeliversCheck) {
+  auto board = ParseBoardFromFEN("R-0,0,0,0-1,1,1,1-1,1,1,1-0,0,0,0-0-x,x,x,yR,yN,yB,yK,yQ,yB,yN,yR,x,x,x/x,x,x,yP,yP,yP,1,yP,yP,yP,yP,x,x,x/x,x,x,3,yP,4,x,x,x/bR,bP,10,gP,gR/bN,bP,10,gP,gN/bB,bP,10,gP,gB/bQ,bP,9,gP,1,gK/bK,1,bP,9,gP,gQ/bB,bP,10,gP,gB/bN,bP,10,gP,gN/bR,bP,10,gP,gR/x,x,x,4,rP,3,x,x,x/x,x,x,rP,rP,rP,rP,1,rP,rP,rP,x,x,x/x,x,x,rR,rN,rB,rQ,rK,rB,rN,rR,x,x,x");
+
+  Move move;
+
+  move = MakeMove(*board, BoardLocation(13, 6), BoardLocation(7, 12));
+  EXPECT_TRUE(board->DeliversCheck(move));
+  EXPECT_TRUE(move.DeliversCheck(*board));
+  EXPECT_TRUE(move.DeliversCheck(*board));
+
+  move = MakeMove(*board, BoardLocation(13, 8), BoardLocation(7, 2));
+  EXPECT_FALSE(board->DeliversCheck(move));
+  EXPECT_FALSE(move.DeliversCheck(*board));
+  EXPECT_FALSE(move.DeliversCheck(*board));
+
+  move = MakeMove(*board, BoardLocation(13, 4), BoardLocation(11, 3));
+  EXPECT_FALSE(board->DeliversCheck(move));
+  EXPECT_FALSE(move.DeliversCheck(*board));
+  EXPECT_FALSE(move.DeliversCheck(*board));
+
+  move = MakeMove(*board, BoardLocation(13, 7), BoardLocation(12, 7));
+  EXPECT_FALSE(board->DeliversCheck(move));
+  EXPECT_FALSE(move.DeliversCheck(*board));
+  EXPECT_FALSE(move.DeliversCheck(*board));
+
+  move = MakeMove(*board, BoardLocation(12, 5), BoardLocation(11, 5));
+  EXPECT_FALSE(board->DeliversCheck(move));
+  EXPECT_FALSE(move.DeliversCheck(*board));
+  EXPECT_FALSE(move.DeliversCheck(*board));
+
+  board = ParseBoardFromFEN("R-0,0,0,0-1,1,1,1-1,1,1,1-0,0,0,0-0-x,x,x,yR,yN,yB,yK,yQ,yB,yN,yR,x,x,x/x,x,x,yP,yP,yP,1,yP,yP,yP,yP,x,x,x/x,x,x,3,yP,4,x,x,x/bR,bP,10,gP,gR/bN,bP,10,gP,gN/bB,bP,10,gP,gB/bQ,bP,9,gP,1,gK/bK,1,bP,9,gP,gQ/bB,bP,10,gP,gB/bN,bP,10,gP,gN/bR,bP,10,gP,gR/x,x,x,1,rB,2,rP,3,x,x,x/x,x,x,rP,rP,rP,rP,1,rP,rP,rP,x,x,x/x,x,x,rR,rN,rB,rQ,rK,1,rN,rR,x,x,x");
+
+  move = MakeMove(*board, BoardLocation(11, 4), BoardLocation(8, 1));
+  EXPECT_TRUE(board->DeliversCheck(move));
+  EXPECT_TRUE(move.DeliversCheck(*board));
+  EXPECT_TRUE(move.DeliversCheck(*board));
+
+  board = ParseBoardFromFEN("R-0,0,0,0-1,1,1,1-1,1,1,1-0,0,0,0-0-x,x,x,yR,yN,yB,yK,yQ,yB,yN,yR,x,x,x/x,x,x,yP,yP,yP,1,yP,yP,yP,yP,x,x,x/x,x,x,3,yP,4,x,x,x/bR,bP,10,gP,gR/bN,bP,10,gP,gN/bB,bP,2,rN,7,gP,gB/bQ,bP,9,gP,1,gK/bK,1,bP,9,gP,gQ/bB,bP,10,gP,gB/bN,bP,10,gP,gN/bR,bP,10,gP,gR/x,x,x,1,rB,2,rP,3,x,x,x/x,x,x,rP,rP,rP,rP,1,rP,rP,rP,x,x,x/x,x,x,rR,1,rB,rQ,rK,1,rN,rR,x,x,x");
+
+  move = MakeMove(*board, BoardLocation(5, 4), BoardLocation(6, 2));
+  EXPECT_TRUE(board->DeliversCheck(move));
+  EXPECT_TRUE(move.DeliversCheck(*board));
+  EXPECT_TRUE(move.DeliversCheck(*board));
+
+  board = ParseBoardFromFEN("R-0,0,0,0-1,1,1,1-1,1,1,1-0,0,0,0-0-x,x,x,yR,yN,yB,yK,yQ,yB,yN,yR,x,x,x/x,x,x,yP,yP,yP,1,yP,yP,yP,yP,x,x,x/x,x,x,3,yP,4,x,x,x/bR,bP,10,gP,gR/bN,bP,10,gP,gN/bB,bP,2,rN,7,gP,gB/bQ,bP,9,gP,1,gK/bK,1,bP,4,rR,4,gP,gQ/bB,bP,10,gP,gB/bN,bP,10,gP,gN/bR,bP,10,gP,gR/x,x,x,1,rB,2,rP,3,x,x,x/x,x,x,rP,rP,rP,rP,1,rP,rP,rP,x,x,x/x,x,x,2,rB,rQ,rK,1,rN,rR,x,x,x");
+
+  move = MakeMove(*board, BoardLocation(7, 7), BoardLocation(7, 2));
+  EXPECT_TRUE(board->DeliversCheck(move));
+  EXPECT_TRUE(move.DeliversCheck(*board));
+  EXPECT_TRUE(move.DeliversCheck(*board));
+
+  move = MakeMove(*board, BoardLocation(7, 7), BoardLocation(7, 12));
+  EXPECT_FALSE(board->DeliversCheck(move));
+  EXPECT_FALSE(move.DeliversCheck(*board));
+  EXPECT_FALSE(move.DeliversCheck(*board));
+
+  board = ParseBoardFromFEN("Y-0,0,0,0-1,1,1,1-1,1,1,1-0,0,0,0-0-x,x,x,yR,yN,1,yK,1,yB,yN,yR,x,x,x/x,x,x,yP,yP,yP,1,yQ,yP,bQ,yP,x,x,x/x,x,x,3,yP,4,x,x,x/bR,bP,10,gP,gR/bN,bP,10,gP,gN/bB,bP,2,rQ,7,gP,gB/1,bP,9,yB,2/bK,1,bP,9,gP,gK/bB,bP,10,gP,gB/bN,bP,10,gP,gN/bR,bP,10,gP,gR/x,x,x,4,rP,3,x,x,x/x,x,x,rP,rP,rP,rP,1,rP,rP,rP,x,x,x/x,x,x,rR,rN,rB,1,rK,rB,rN,rR,x,x,x");
+
+  move = MakeMove(*board, BoardLocation(1, 7), BoardLocation(7, 13));
+
+  EXPECT_TRUE(board->DeliversCheck(move));
+  EXPECT_TRUE(move.DeliversCheck(*board));
+  EXPECT_TRUE(move.DeliversCheck(*board));
+
 }
 
 

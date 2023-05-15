@@ -372,7 +372,11 @@ std::optional<Move> ParseMove(Board& board, const std::string& move_str) {
   BoardLocation from_loc = std::get<1>(from.value());
   BoardLocation to_loc = std::get<1>(to.value());
 
-  for (const auto& move : board.GetPseudoLegalMoves()) {
+  Move moves[300];
+  size_t num_moves = board.GetPseudoLegalMoves2(moves, 300);
+
+  for (size_t i = 0; i < num_moves; i++) {
+    const auto& move = moves[i];
     if (move.From() == from_loc && move.To() == to_loc) {
       return move;
     }

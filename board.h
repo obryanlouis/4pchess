@@ -10,6 +10,7 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+#include <iostream>
 
 namespace chess {
 
@@ -18,8 +19,8 @@ class Board;
 constexpr int kNumPieceTypes = 6;
 
 enum PieceType : int8_t {
-  UNINITIALIZED_PIECE = -1,
   PAWN = 0, KNIGHT = 1, BISHOP = 2, ROOK = 3, QUEEN = 4, KING = 5,
+  NO_PIECE = 6,
 };
 
 enum PlayerColor : int8_t {
@@ -68,60 +69,138 @@ struct std::hash<chess::Player>
 
 namespace chess {
 
+//class Piece {
+// public:
+//  Piece() : piece_type_(NO_PIECE) { }
+//
+//  Piece(Player player, PieceType piece_type)
+//    : player_(std::move(player)),
+//      piece_type_(piece_type)
+//  { }
+//
+//  const Player& GetPlayer() const { return player_; }
+//  PieceType GetPieceType() const { return piece_type_; }
+//  Team GetTeam() const { return GetPlayer().GetTeam(); }
+//  PlayerColor GetColor() const { return GetPlayer().GetColor(); }
+//  bool operator==(const Piece& other) const {
+//    return player_ == other.player_ && piece_type_ == other.piece_type_;
+//  }
+//  bool operator!=(const Piece& other) const {
+//    return !(*this == other);
+//  }
+//  friend std::ostream& operator<<(
+//      std::ostream& os, const Piece& piece);
+//
+// private:
+//  Player player_;
+//  PieceType piece_type_;
+//};
+
 class Piece {
  public:
-  Piece() : piece_type_(UNINITIALIZED_PIECE) { }
+  Piece() : Piece(false, RED, NO_PIECE) { }
+
+  Piece(bool present, PlayerColor color, PieceType piece_type) {
+    bits_ = (((int8_t)present) << 7)
+          | (((int8_t)color) << 5)
+          | (((int8_t)piece_type) << 2);
+  }
+
+  Piece(PlayerColor color, PieceType piece_type)
+    : Piece(true, color, piece_type) { }
 
   Piece(Player player, PieceType piece_type)
-    : player_(std::move(player)),
-      piece_type_(piece_type)
-  { }
+    : Piece(true, player.GetColor(), piece_type) { }
 
-  const Player& GetPlayer() const { return player_; }
-  PieceType GetPieceType() const { return piece_type_; }
+  bool Present() const {
+    return bits_ & (1 << 7);
+  }
+  bool Missing() const { return !Present(); }
+  PlayerColor GetColor() const {
+    return static_cast<PlayerColor>((bits_ & 0b01100000) >> 5);
+  }
+  PieceType GetPieceType() const {
+    return static_cast<PieceType>((bits_ & 0b00011100) >> 2);
+  }
+
+  bool operator==(const Piece& other) const { return bits_ == other.bits_; }
+  bool operator!=(const Piece& other) const { return bits_ != other.bits_; }
+
+  Player GetPlayer() const { return Player(GetColor()); }
   Team GetTeam() const { return GetPlayer().GetTeam(); }
-  PlayerColor GetColor() const { return GetPlayer().GetColor(); }
-  bool operator==(const Piece& other) const {
-    return player_ == other.player_ && piece_type_ == other.piece_type_;
-  }
-  bool operator!=(const Piece& other) const {
-    return !(*this == other);
-  }
   friend std::ostream& operator<<(
       std::ostream& os, const Piece& piece);
 
+  static Piece kNoPiece;
+
  private:
-  Player player_;
-  PieceType piece_type_;
+  // bit 0: presence
+  // bit 1-2: player
+  // bit 3-5: piece type
+  int8_t bits_;
 };
 
+//extern const Piece* kPieceSet[4][6];
+
+
+//class BoardLocation {
+// public:
+//  BoardLocation() = default;
+//
+//  BoardLocation(int8_t row, int8_t col) : row_(row), col_(col) { }
+//
+//  int8_t GetRow() const { return row_; }
+//  int8_t GetCol() const { return col_; }
+//  bool operator==(const BoardLocation& other) const {
+//    return row_ == other.row_ && col_ == other.col_;
+//  }
+//  bool operator!=(const BoardLocation& other) const {
+//    return !(*this == other);
+//  }
+//
+//  BoardLocation Relative(int8_t delta_rows, int8_t delta_cols) const {
+//    return BoardLocation(row_ + delta_rows, col_ + delta_cols);
+//  }
+//  friend std::ostream& operator<<(
+//      std::ostream& os, const BoardLocation& location);
+//
+//  std::string PrettyStr() const;
+//
+// private:
+//  int8_t row_ = 0;
+//  int8_t col_ = 0;
+//};
 
 class BoardLocation {
  public:
-  BoardLocation() = default;
-
-  BoardLocation(int8_t row, int8_t col) : row_(row), col_(col) { }
-
-  int8_t GetRow() const { return row_; }
-  int8_t GetCol() const { return col_; }
-  bool operator==(const BoardLocation& other) const {
-    return row_ == other.row_ && col_ == other.col_;
-  }
-  bool operator!=(const BoardLocation& other) const {
-    return !(*this == other);
+  BoardLocation() : loc_(196) {}
+  BoardLocation(int8_t row, int8_t col) {
+    loc_ = (row < 0 || row >= 14 || col < 0 || col >= 14)
+      ? 196 : 14 * row + col;
   }
 
-  BoardLocation Relative(int8_t delta_rows, int8_t delta_cols) const {
-    return BoardLocation(row_ + delta_rows, col_ + delta_cols);
+  bool Present() const { return loc_ < 196; }
+  bool Missing() const { return !Present(); }
+  int8_t GetRow() const { return loc_ / 14; }
+  int8_t GetCol() const { return loc_ % 14; }
+
+  BoardLocation Relative(int8_t delta_row, int8_t delta_col) const {
+    return BoardLocation(GetRow() + delta_row, GetCol() + delta_col);
   }
+
+  bool operator==(const BoardLocation& other) const { return loc_ == other.loc_; }
+  bool operator!=(const BoardLocation& other) const { return loc_ != other.loc_; }
+
   friend std::ostream& operator<<(
       std::ostream& os, const BoardLocation& location);
-
   std::string PrettyStr() const;
 
+  static BoardLocation kNoLocation;
+
  private:
-  int8_t row_ = 0;
-  int8_t col_ = 0;
+  // value 0-195: 1 + 14*row + col
+  // value 196: not present
+  uint8_t loc_;
 };
 
 }  // namespace chess
@@ -142,22 +221,21 @@ namespace chess {
 // Move or capture. Does not include pawn promotion, en-passant, or castling.
 class SimpleMove {
  public:
+  SimpleMove() = default;
+
   SimpleMove(BoardLocation from,
-             BoardLocation to,
-             const Piece* piece)
+             BoardLocation to)
     : from_(std::move(from)),
-      to_(std::move(to)),
-      piece_(piece)
+      to_(std::move(to))
   { }
 
+  bool Present() const { return from_.Present() && to_.Present(); }
   const BoardLocation& From() const { return from_; }
   const BoardLocation& To() const { return to_; }
-  const Piece* GetPiece() const { return piece_; }
 
   bool operator==(const SimpleMove& other) const {
     return from_ == other.from_
-        && to_ == other.to_
-        && piece_ == other.piece_;
+        && to_ == other.to_;
   }
 
   bool operator!=(const SimpleMove& other) const {
@@ -167,7 +245,6 @@ class SimpleMove {
  private:
   BoardLocation from_;
   BoardLocation to_;
-  const Piece* piece_;
 };
 
 enum CastlingType {
@@ -179,21 +256,33 @@ class CastlingRights {
   CastlingRights() = default;
 
   CastlingRights(bool kingside, bool queenside)
-    : kingside_(kingside), queenside_(queenside) { }
+    : bits_(0b10000000 | (kingside << 6) | (queenside << 5)) { }
+    //: kingside_(kingside), queenside_(queenside) { }
 
-  bool Kingside() const { return kingside_; }
-  bool Queenside() const { return queenside_; }
+  bool Present() const { return bits_ & (1 << 7); }
+  bool Kingside() const { return bits_ & (1 << 6); }
+  bool Queenside() const { return bits_ & (1 << 5); }
+  //bool Kingside() const { return kingside_; }
+  //bool Queenside() const { return queenside_; }
 
   bool operator==(const CastlingRights& other) const {
-    return kingside_ == other.kingside_ && queenside_ == other.queenside_;
+    return bits_ == other.bits_;
+    //return kingside_ == other.kingside_ && queenside_ == other.queenside_;
   }
   bool operator!=(const CastlingRights& other) const {
     return !(*this == other);
   }
 
+  static CastlingRights kMissingRights;
+
  private:
-  bool kingside_ = true;
-  bool queenside_ = true;
+  // bit 0: presence
+  // bit 1: kingside
+  // bit 2: queenside
+  int8_t bits_ = 0;
+
+  //bool kingside_ = true;
+  //bool queenside_ = true;
 };
 
 class Move {
@@ -202,10 +291,9 @@ class Move {
 
   // Standard move
   Move(BoardLocation from, BoardLocation to,
-       const Piece* standard_capture = nullptr,
-//       std::optional<Piece> standard_capture = std::nullopt,
-       std::optional<CastlingRights> initial_castling_rights = std::nullopt,
-       std::optional<CastlingRights> castling_rights = std::nullopt)
+       Piece standard_capture = Piece::kNoPiece,
+       CastlingRights initial_castling_rights = CastlingRights::kMissingRights,
+       CastlingRights castling_rights = CastlingRights::kMissingRights)
     : from_(std::move(from)),
       to_(std::move(to)),
       standard_capture_(standard_capture),
@@ -215,62 +303,57 @@ class Move {
 
   // Pawn move
   Move(BoardLocation from, BoardLocation to,
-       const Piece* standard_capture,
-//       std::optional<Piece> standard_capture,
-       std::optional<BoardLocation> en_passant_location,
-//       std::optional<Piece> en_passant_capture,
-       const Piece* en_passant_capture,
-       std::optional<PieceType> promotion_piece_type)
+       Piece standard_capture,
+       BoardLocation en_passant_location,
+       Piece en_passant_capture,
+       PieceType promotion_piece_type = NO_PIECE)
     : from_(std::move(from)),
       to_(std::move(to)),
       standard_capture_(standard_capture),
       promotion_piece_type_(promotion_piece_type),
-      en_passant_location_(std::move(en_passant_location)),
+      en_passant_location_(en_passant_location),
       en_passant_capture_(en_passant_capture)
   { }
 
   // Castling
   Move(BoardLocation from, BoardLocation to,
        SimpleMove rook_move,
-       std::optional<CastlingRights> initial_castling_rights,
-       std::optional<CastlingRights> castling_rights)
+       CastlingRights initial_castling_rights,
+       CastlingRights castling_rights)
     : from_(std::move(from)),
       to_(std::move(to)),
-      rook_move_(std::move(rook_move)),
+      rook_move_(rook_move),
       initial_castling_rights_(std::move(initial_castling_rights)),
       castling_rights_(std::move(castling_rights))
   { }
 
   const BoardLocation& From() const { return from_; }
   const BoardLocation& To() const { return to_; }
-  const Piece* GetStandardCapture() const {
+  Piece GetStandardCapture() const {
     return standard_capture_;
   }
-  const std::optional<PieceType>& GetPromotionPieceType() const {
+  PieceType GetPromotionPieceType() const {
     return promotion_piece_type_;
   }
-  const std::optional<BoardLocation>& GetEnpassantLocation() const {
+  const BoardLocation GetEnpassantLocation() const {
     return en_passant_location_;
   }
-  const Piece* GetEnpassantCapture() const {
+  Piece GetEnpassantCapture() const {
     return en_passant_capture_;
   }
-  const std::optional<SimpleMove>& GetRookMove() const { return rook_move_; }
-  const std::optional<CastlingRights>& GetInitialCastlingRights() const {
+  SimpleMove GetRookMove() const { return rook_move_; }
+  CastlingRights GetInitialCastlingRights() const {
     return initial_castling_rights_;
   }
-  const std::optional<CastlingRights>& GetCastlingRights() const {
+  CastlingRights GetCastlingRights() const {
     return castling_rights_;
   }
 
   bool IsCapture() const {
-    return standard_capture_ != nullptr || en_passant_capture_ != nullptr;
+    return standard_capture_.Present() || en_passant_capture_.Present();
   }
-  const Piece* GetCapturePiece() const {
-    if (standard_capture_ == nullptr) {
-      return en_passant_capture_;
-    }
-    return standard_capture_;
+  Piece GetCapturePiece() const {
+    return standard_capture_.Present() ? standard_capture_ : en_passant_capture_;
   }
 
   bool operator==(const Move& other) const {
@@ -291,33 +374,35 @@ class Move {
   friend std::ostream& operator<<(
       std::ostream& os, const Move& move);
   std::string PrettyStr() const;
+  // NOTE: This does not find discovered checks.
   bool DeliversCheck(Board& board);
 
  private:
-  BoardLocation from_;
-  BoardLocation to_;
+  BoardLocation from_;  // 1
+  BoardLocation to_;  // 1
 
   // Capture
-  const Piece* standard_capture_ = nullptr;
+  Piece standard_capture_; // 1
 
   // Promotion
-  std::optional<PieceType> promotion_piece_type_;
+  PieceType promotion_piece_type_ = NO_PIECE; // 1
 
   // En-passant
-  std::optional<BoardLocation> en_passant_location_;
-  const Piece* en_passant_capture_ = nullptr;
+  BoardLocation en_passant_location_; // 1
+  Piece en_passant_capture_;  // 1
 
   // For castling moves
-  std::optional<SimpleMove> rook_move_;
+  SimpleMove rook_move_; // 2
 
   // Castling rights before the move
-  std::optional<CastlingRights> initial_castling_rights_;
+  CastlingRights initial_castling_rights_; // 1
 
   // Castling rights after the move
-  std::optional<CastlingRights> castling_rights_;
+  CastlingRights castling_rights_; // 1
 
   // Cached check
-  std::optional<bool> delivers_check_;
+  // -1 means missing, 0/1 store check values
+  int8_t delivers_check_ = -1; // 1
 };
 
 enum GameResult {
@@ -329,26 +414,44 @@ enum GameResult {
 
 class PlacedPiece {
  public:
+  PlacedPiece() = default;
+
   PlacedPiece(const BoardLocation& location,
-              const Piece* piece)
+              const Piece& piece)
     : location_(location),
       piece_(piece)
   { }
 
   const BoardLocation& GetLocation() const { return location_; }
-  const Piece* GetPiece() const { return piece_; }
+  const Piece& GetPiece() const { return piece_; }
   friend std::ostream& operator<<(
       std::ostream& os, const PlacedPiece& placed_piece);
 
  private:
   BoardLocation location_;
-  const Piece* piece_ = nullptr;
+  Piece piece_;
 };
 
 struct EnpassantInitialization {
   // Indexed by PlayerColor
   std::optional<Move> enp_moves[4] = {std::nullopt, std::nullopt, std::nullopt, std::nullopt};
 };
+
+struct MoveBuffer {
+  Move* buffer = nullptr;
+  size_t pos = 0;
+  size_t limit = 0;
+
+  template<class... T>
+  void emplace_back(T&&... args) {
+    if (pos >= limit) {
+      std::cout << "Move buffer overflow" << std::endl;
+      abort();
+    }
+    buffer[pos++] = Move(std::forward<T>(args)...);
+  }
+};
+
 
 class Board {
  // Conventions:
@@ -367,7 +470,8 @@ class Board {
 
   Board(Board&) = default;
 
-  std::vector<Move> GetPseudoLegalMoves();
+  size_t GetPseudoLegalMoves2(Move* buffer, size_t limit);
+
   bool IsKingInCheck(const Player& player) const;
   bool IsKingInCheck(Team team) const;
 
@@ -383,19 +487,25 @@ class Board {
   bool IsAttackedByTeam(
       Team team,
       const BoardLocation& location) const;
-  std::vector<PlacedPiece> GetAttackers(
-      Team team, const BoardLocation& location,
-      bool return_early = false) const;
-  std::optional<BoardLocation> GetKingLocation(const Player& turn) const;
+
+//  std::vector<PlacedPiece> GetAttackers(
+//      Team team, const BoardLocation& location,
+//      bool return_early = false) const;
+
+  size_t GetAttackers2(
+      PlacedPiece* buffer, size_t limit,
+      Team team, const BoardLocation& location) const;
+
+  BoardLocation GetKingLocation(PlayerColor color) const;
   bool DeliversCheck(const Move& move);
 
-  const Piece* GetPiece(
+  const Piece& GetPiece(
       int row, int col) const {
     return location_to_piece_[row][col];
   }
-  const Piece* GetPiece(
+  const Piece& GetPiece(
       const BoardLocation& location) const {
-    return location_to_piece_[location.GetRow()][location.GetCol()];
+    return GetPiece(location.GetRow(), location.GetCol());
   }
   inline bool IsOnPathBetween(
       const BoardLocation& from,
@@ -417,7 +527,7 @@ class Board {
   void MakeMove(const Move& move);
   void UndoMove();
   bool LastMoveWasCapture() const {
-    return !moves_.empty() && moves_.back().GetStandardCapture() != nullptr;
+    return !moves_.empty() && moves_.back().GetStandardCapture().Present();
   }
   const Move& GetLastMove() const {
     return moves_.back();
@@ -425,30 +535,39 @@ class Board {
   int NumMoves() const { return moves_.size(); }
 
 
-  void GetPawnMoves(
-      std::vector<Move>& moves,
+  void GetPawnMoves2(
+      MoveBuffer& moves,
       const BoardLocation& from,
       const Piece& piece) const;
-  void GetKnightMoves(
-      std::vector<Move>& moves,
+  void GetKnightMoves2(
+      MoveBuffer& moves,
       const BoardLocation& from,
       const Piece& piece) const;
-  void GetBishopMoves(
-      std::vector<Move>& moves,
+  void GetBishopMoves2(
+      MoveBuffer& moves,
       const BoardLocation& from,
       const Piece& piece) const;
-  void GetRookMoves(
-      std::vector<Move>& moves,
+  void GetRookMoves2(
+      MoveBuffer& moves,
       const BoardLocation& from,
       const Piece& piece) const;
-  void GetQueenMoves(
-      std::vector<Move>& moves,
+  void GetQueenMoves2(
+      MoveBuffer& moves,
       const BoardLocation& from,
       const Piece& piece) const;
-  void GetKingMoves(
-      std::vector<Move>& moves,
+  void GetKingMoves2(
+      MoveBuffer& moves,
       const BoardLocation& from,
       const Piece& piece) const;
+  void AddMovesFromIncrMovement2(
+      MoveBuffer& moves,
+      const Piece& piece,
+      const BoardLocation& from,
+      int incr_row,
+      int incr_col,
+      CastlingRights initial_castling_rights = CastlingRights::kMissingRights,
+      CastlingRights castling_rights = CastlingRights::kMissingRights) const;
+
 
   friend std::ostream& operator<<(
       std::ostream& os, const Board& board);
@@ -478,15 +597,14 @@ class Board {
   const std::vector<std::vector<PlacedPiece>>& GetPieceList() { return piece_list_; };
 
  private:
-
   void AddMovesFromIncrMovement(
       std::vector<Move>& moves,
       const Piece& piece,
       const BoardLocation& from,
       int incr_row,
       int incr_col,
-      const std::optional<CastlingRights>& initial_castling_rights = std::nullopt,
-      const std::optional<CastlingRights>& castling_rights = std::nullopt) const;
+      CastlingRights initial_castling_rights = CastlingRights::kMissingRights,
+      CastlingRights castling_rights = CastlingRights::kMissingRights) const;
   int GetMaxRow() const { return 13; }
   int GetMaxCol() const { return 13; }
   std::optional<CastlingType> GetRookLocationType(
@@ -525,13 +643,12 @@ class Board {
 
   Player turn_;
 
-  const Piece* location_to_piece_[14][14];
-  // [Player][Piece*]
+  Piece location_to_piece_[14][14];
   std::vector<std::vector<PlacedPiece>> piece_list_;
 
   BoardLocation locations_[14][14];
 
-  std::unordered_map<Player, CastlingRights> castling_rights_;
+  CastlingRights castling_rights_[4];
   EnpassantInitialization enp_;
   std::vector<Move> moves_; // list of moves from beginning of game
   std::vector<Move> move_buffer_;
@@ -543,6 +660,9 @@ class Board {
   int64_t piece_hashes_[4][6][14][14];
   int64_t turn_hashes_[4];
   BoardLocation king_locations_[4];
+
+  size_t move_buffer_size_ = 300;
+  Move move_buffer_2_[300];
 };
 
 // Helper functions

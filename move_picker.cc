@@ -19,19 +19,25 @@ MovePicker::MovePicker(
     int piece_evaluations[6],
     int history_heuristic[14][14][14][14],
     int piece_move_order_scores[6],
-    bool enable_move_order_checks) {
+    bool enable_move_order_checks,
+    Move* buffer,
+    size_t buffer_size) {
   enable_move_order_checks_ = enable_move_order_checks;
   stages_.resize(5);
-  moves_ = board.GetPseudoLegalMoves();
+  //moves_ = board.GetPseudoLegalMoves();
+  moves_ = buffer;
+  num_moves_ = board.GetPseudoLegalMoves2(buffer, buffer_size);
   board_ = &board;
 
-  for (unsigned short i = 0; i < moves_.size(); i++) {
+//  for (unsigned short i = 0; i < moves_.size(); i++) {
+//    const auto& move = moves_[i];
+  for (size_t i = 0; i < num_moves_; i++) {
     const auto& move = moves_[i];
 
-    const auto* capture = move.GetCapturePiece();
-    const auto* piece = board.GetPiece(move.From());
+    const auto capture = move.GetCapturePiece();
+    const auto piece = board.GetPiece(move.From());
 
-    int score = piece_move_order_scores[piece->GetPieceType()];
+    int score = piece_move_order_scores[piece.GetPieceType()];
     if (pvmove.has_value() && move == pvmove.value()) {
       stages_[PV_MOVE].emplace_back(i, score);
     } else if (killers != nullptr
@@ -39,8 +45,8 @@ MovePicker::MovePicker(
       stages_[KILLER].emplace_back(i, score + (move == killers[0] ? 1 : 0));
     } else if (move.IsCapture()) {
       // We'd ideally use SEE here, if it weren't so expensive to compute.
-      int captured_val = piece_evaluations[capture->GetPieceType()];
-      int attacker_val = piece_evaluations[piece->GetPieceType()];
+      int captured_val = piece_evaluations[capture.GetPieceType()];
+      int attacker_val = piece_evaluations[piece.GetPieceType()];
       score += captured_val - attacker_val/100;
       if (attacker_val <= captured_val) {
         stages_[GOOD_CAPTURE].emplace_back(i, score);
