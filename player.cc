@@ -369,7 +369,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       value_and_move_or = Search(
           ss+1, NonPV, board, ply + 1, depth - 1 + e,
           -alpha-1, -alpha, !maximizing_player, expanded + e,
-          deadline, *child_pvinfo, null_moves, false);
+          deadline, *child_pvinfo, null_moves, true);
     }
 
     // For PV nodes only, do a full PV search on the first move or after a fail
@@ -382,7 +382,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
         value_and_move_or = Search(
             ss+1, PV, board, ply + 1, depth - 1 + e,
             -beta, -alpha, !maximizing_player, expanded + e,
-            deadline, *child_pvinfo, null_moves, !isCutNode);
+            deadline, *child_pvinfo, null_moves, false);
     }
 
     board.UndoMove();
