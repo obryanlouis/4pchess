@@ -347,8 +347,6 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       num_lmr_searches_++;
 
       int r = Reduction(depth, move_count + 1);
-      // reduce more on cut nodes.
-      if (isCutNode) r++;
       r = std::clamp(r, 0, depth - 2);
       value_and_move_or = Search(
           ss+1, NonPV, board, ply + 1, depth - 1 - r + e,
@@ -369,7 +367,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       value_and_move_or = Search(
           ss+1, NonPV, board, ply + 1, depth - 1 + e,
           -alpha-1, -alpha, !maximizing_player, expanded + e,
-          deadline, *child_pvinfo, null_moves, true);
+          deadline, *child_pvinfo, null_moves, !isCutNode);
     }
 
     // For PV nodes only, do a full PV search on the first move or after a fail
