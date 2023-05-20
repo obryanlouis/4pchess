@@ -210,9 +210,9 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
     PVInfo null_pvinfo;
     int r = std::min(depth / 3 + 1, depth - 1);
     auto value_and_move_or = Search(
-        ss+1, NonPV, board, ply + 1, depth - r - 1,
+        ss+1, NonPV, board, ply + 1, depth - r,
         -beta, -beta + 1, !maximizing_player, expanded, deadline, null_pvinfo,
-        null_moves + 1);
+        null_moves + 1, !isCutNode);
 
     board.UndoNullMove();
 
@@ -220,10 +220,10 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
     if (value_and_move_or.has_value()
         && -std::get<0>(value_and_move_or.value()) >= beta) {
       num_null_moves_pruned_++;
-
-      if (options_.enable_transposition_table) {
-        transposition_table_->Save(board.HashKey(), depth, std::nullopt, beta, LOWER_BOUND, is_pv_node);
-      }
+      
+      // reset killers
+	    (ss+1)->killers[0] = {};
+	    (ss+1)->killers[1] = {};
 
       return std::make_tuple(beta, std::nullopt);
     }
@@ -350,7 +350,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       r = std::clamp(r, 0, depth - 2);
       value_and_move_or = Search(
           ss+1, NonPV, board, ply + 1, depth - 1 - r + e,
-          -alpha-1, -alpha, !maximizing_player, expanded + e,
+          -(alpha + 1), -alpha, !maximizing_player, expanded + e,
           deadline, *child_pvinfo, null_moves, true);
       if (value_and_move_or.has_value()) {
         int score = -std::get<0>(value_and_move_or.value());
@@ -358,7 +358,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
           num_lmr_researches_++;
           value_and_move_or = Search(
               ss+1, NonPV, board, ply + 1, depth - 1 + e,
-              -beta, -alpha, !maximizing_player, expanded + e,
+              -(alpha + 1), -alpha, !maximizing_player, expanded + e,
               deadline, *child_pvinfo, null_moves, !isCutNode);
         }
       }
