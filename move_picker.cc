@@ -1,5 +1,6 @@
 #include "move_picker.h"
 
+#include <algorithm>
 #include <iostream>
 
 namespace chess {
