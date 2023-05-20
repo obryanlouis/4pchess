@@ -194,7 +194,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
 //    any_player_checked = board.IsKingInCheck(other_player);
 //  }
 
-  // null move pruning
+  // null move with verification.
   if (options_.enable_null_move_pruning
       && !is_root_node // not root
       && !is_pv_node // not a pv node
@@ -213,22 +213,31 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
         ss+1, NonPV, board, ply + 1, depth - r - 1,
         -beta, -beta + 1, !maximizing_player, expanded, deadline, null_pvinfo,
         null_moves + 1);
-
     board.UndoNullMove();
-
-    // if it failed high, skip this move
-    if (value_and_move_or.has_value()
-        && -std::get<0>(value_and_move_or.value()) >= beta) {
-      num_null_moves_pruned_++;
-
-      if (options_.enable_transposition_table) {
-        transposition_table_->Save(board.HashKey(), depth, std::nullopt, beta, LOWER_BOUND, is_pv_node);
+    int nullScore = 0;
+    bool runNMCheck = true;
+    if (value_and_move_or.has_value())
+      nullScore = -std::get<0>(value_and_move_or.value());
+    else
+      runNMCheck = false;
+    // null move with verification.
+    if (runNMCheck && nullScore >= beta) {
+      if (depth <= 10) {
+        auto value_and_move_or = Search(
+          ss+1, NonPV, board, ply + 1, depth - r - 1,
+          alpha, beta, maximizing_player, expanded, deadline, null_pvinfo,
+          null_moves + 1);
+        int verifyScore = std::get<0>(value_and_move_or.value());
+        if (verifyScore >= beta) {
+          num_null_moves_pruned_++;
+          return std::make_tuple(verifyScore, std::nullopt);
+        }
       }
-
-      return std::make_tuple(beta, std::nullopt);
+      num_null_moves_pruned_++;
+      return std::make_tuple(nullScore, std::nullopt);
     }
   }
-
+  
   std::optional<Move> best_move;
   int player_color = static_cast<int>(player.GetColor());
   int curr_mob_score = player_mobility_scores_[player_color];
