@@ -12,47 +12,14 @@
 #include <vector>
 #include <iostream>
 
+#include "types.h"
+#include "nnue/nnue.h"
+
 namespace chess {
 
 class Board;
 
 constexpr int kNumPieceTypes = 6;
-
-enum PieceType : int8_t {
-  PAWN = 0, KNIGHT = 1, BISHOP = 2, ROOK = 3, QUEEN = 4, KING = 5,
-  NO_PIECE = 6,
-};
-
-enum PlayerColor : int8_t {
-  UNINITIALIZED_PLAYER = -1,
-  RED = 0, BLUE = 1, YELLOW = 2, GREEN = 3,
-};
-
-enum Team : int8_t {
-  RED_YELLOW = 0, BLUE_GREEN = 1,
-};
-
-class Player {
- public:
-  Player() : color_(UNINITIALIZED_PLAYER) { }
-  explicit Player(PlayerColor color) : color_(color) { }
-
-  PlayerColor GetColor() const { return color_; }
-  Team GetTeam() const {
-    return (color_ == RED || color_ == YELLOW) ? RED_YELLOW : BLUE_GREEN;
-  }
-  bool operator==(const Player& other) const {
-    return color_ == other.color_;
-  }
-  bool operator!=(const Player& other) const {
-    return !(*this == other);
-  }
-  friend std::ostream& operator<<(
-      std::ostream& os, const Player& player);
-
- private:
-  PlayerColor color_;
-};
 
 }  // namespace chess
 
@@ -68,140 +35,6 @@ struct std::hash<chess::Player>
 
 
 namespace chess {
-
-//class Piece {
-// public:
-//  Piece() : piece_type_(NO_PIECE) { }
-//
-//  Piece(Player player, PieceType piece_type)
-//    : player_(std::move(player)),
-//      piece_type_(piece_type)
-//  { }
-//
-//  const Player& GetPlayer() const { return player_; }
-//  PieceType GetPieceType() const { return piece_type_; }
-//  Team GetTeam() const { return GetPlayer().GetTeam(); }
-//  PlayerColor GetColor() const { return GetPlayer().GetColor(); }
-//  bool operator==(const Piece& other) const {
-//    return player_ == other.player_ && piece_type_ == other.piece_type_;
-//  }
-//  bool operator!=(const Piece& other) const {
-//    return !(*this == other);
-//  }
-//  friend std::ostream& operator<<(
-//      std::ostream& os, const Piece& piece);
-//
-// private:
-//  Player player_;
-//  PieceType piece_type_;
-//};
-
-class Piece {
- public:
-  Piece() : Piece(false, RED, NO_PIECE) { }
-
-  Piece(bool present, PlayerColor color, PieceType piece_type) {
-    bits_ = (((int8_t)present) << 7)
-          | (((int8_t)color) << 5)
-          | (((int8_t)piece_type) << 2);
-  }
-
-  Piece(PlayerColor color, PieceType piece_type)
-    : Piece(true, color, piece_type) { }
-
-  Piece(Player player, PieceType piece_type)
-    : Piece(true, player.GetColor(), piece_type) { }
-
-  bool Present() const {
-    return bits_ & (1 << 7);
-  }
-  bool Missing() const { return !Present(); }
-  PlayerColor GetColor() const {
-    return static_cast<PlayerColor>((bits_ & 0b01100000) >> 5);
-  }
-  PieceType GetPieceType() const {
-    return static_cast<PieceType>((bits_ & 0b00011100) >> 2);
-  }
-
-  bool operator==(const Piece& other) const { return bits_ == other.bits_; }
-  bool operator!=(const Piece& other) const { return bits_ != other.bits_; }
-
-  Player GetPlayer() const { return Player(GetColor()); }
-  Team GetTeam() const { return GetPlayer().GetTeam(); }
-  friend std::ostream& operator<<(
-      std::ostream& os, const Piece& piece);
-
-  static Piece kNoPiece;
-
- private:
-  // bit 0: presence
-  // bit 1-2: player
-  // bit 3-5: piece type
-  int8_t bits_;
-};
-
-//extern const Piece* kPieceSet[4][6];
-
-
-//class BoardLocation {
-// public:
-//  BoardLocation() = default;
-//
-//  BoardLocation(int8_t row, int8_t col) : row_(row), col_(col) { }
-//
-//  int8_t GetRow() const { return row_; }
-//  int8_t GetCol() const { return col_; }
-//  bool operator==(const BoardLocation& other) const {
-//    return row_ == other.row_ && col_ == other.col_;
-//  }
-//  bool operator!=(const BoardLocation& other) const {
-//    return !(*this == other);
-//  }
-//
-//  BoardLocation Relative(int8_t delta_rows, int8_t delta_cols) const {
-//    return BoardLocation(row_ + delta_rows, col_ + delta_cols);
-//  }
-//  friend std::ostream& operator<<(
-//      std::ostream& os, const BoardLocation& location);
-//
-//  std::string PrettyStr() const;
-//
-// private:
-//  int8_t row_ = 0;
-//  int8_t col_ = 0;
-//};
-
-class BoardLocation {
- public:
-  BoardLocation() : loc_(196) {}
-  BoardLocation(int8_t row, int8_t col) {
-    loc_ = (row < 0 || row >= 14 || col < 0 || col >= 14)
-      ? 196 : 14 * row + col;
-  }
-
-  bool Present() const { return loc_ < 196; }
-  bool Missing() const { return !Present(); }
-  int8_t GetRow() const { return loc_ / 14; }
-  int8_t GetCol() const { return loc_ % 14; }
-
-  BoardLocation Relative(int8_t delta_row, int8_t delta_col) const {
-    return BoardLocation(GetRow() + delta_row, GetCol() + delta_col);
-  }
-
-  bool operator==(const BoardLocation& other) const { return loc_ == other.loc_; }
-  bool operator!=(const BoardLocation& other) const { return loc_ != other.loc_; }
-
-  friend std::ostream& operator<<(
-      std::ostream& os, const BoardLocation& location);
-  std::string PrettyStr() const;
-
-  static BoardLocation kNoLocation;
-
- private:
-  // value 0-195: 1 + 14*row + col
-  // value 196: not present
-  uint8_t loc_;
-};
 
 }  // namespace chess
 
@@ -412,26 +245,6 @@ enum GameResult {
   STALEMATE = 3,
 };
 
-class PlacedPiece {
- public:
-  PlacedPiece() = default;
-
-  PlacedPiece(const BoardLocation& location,
-              const Piece& piece)
-    : location_(location),
-      piece_(piece)
-  { }
-
-  const BoardLocation& GetLocation() const { return location_; }
-  const Piece& GetPiece() const { return piece_; }
-  friend std::ostream& operator<<(
-      std::ostream& os, const PlacedPiece& placed_piece);
-
- private:
-  BoardLocation location_;
-  Piece piece_;
-};
-
 struct EnpassantInitialization {
   // Indexed by PlayerColor
   std::optional<Move> enp_moves[4] = {std::nullopt, std::nullopt, std::nullopt, std::nullopt};
@@ -533,7 +346,7 @@ class Board {
     return moves_.back();
   }
   int NumMoves() const { return moves_.size(); }
-
+  const std::vector<Move>& Moves() { return moves_; }
 
   void GetPawnMoves2(
       MoveBuffer& moves,
@@ -595,6 +408,8 @@ class Board {
   }
   const EnpassantInitialization& GetEnpassantInitialization() { return enp_; }
   const std::vector<std::vector<PlacedPiece>>& GetPieceList() { return piece_list_; };
+
+  void SetNNUE(NNUE* nnue) { nnue_ = nnue; }
 
  private:
   void AddMovesFromIncrMovement(
@@ -663,6 +478,7 @@ class Board {
 
   size_t move_buffer_size_ = 300;
   Move move_buffer_2_[300];
+  NNUE* nnue_ = nullptr;
 };
 
 // Helper functions

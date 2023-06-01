@@ -51,10 +51,12 @@ struct PlayerOptions {
   bool enable_piece_development = true;
   bool enable_lazy_eval = true;
   bool enable_piece_imbalance = true;
-
   bool enable_late_move_reduction = true;
   bool enable_late_move_pruning =   true;
   bool enable_null_move_pruning =   true;
+
+  bool enable_nnue = false;
+  std::string nnue_weights_filepath;
 
   // generic test change
   bool test = true;
@@ -81,7 +83,7 @@ class AlphaBetaPlayer {
   std::optional<std::tuple<int, std::optional<Move>, int>> MakeMove(
       Board& board,
       std::optional<std::chrono::milliseconds> time_limit = std::nullopt,
-      int max_depth = 20);
+      int max_depth = 100);
   int Evaluate(Board& board, bool maximizing_player, int alpha = -kMateValue, int beta = kMateValue);
   void CancelEvaluation() { canceled_ = true; }
   // NOTE: Should wait until evaluation is done before resetting this to true.
@@ -216,6 +218,8 @@ class AlphaBetaPlayer {
   int threat_hanging_ = 72;
   int weak_queen_protection_ = 12;
   int king_attacker_values_[6];
+
+  std::unique_ptr<NNUE> nnue_;
 };
 
 }  // namespace chess

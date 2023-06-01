@@ -79,6 +79,10 @@ AlphaBetaPlayer::AlphaBetaPlayer(std::optional<PlayerOptions> options) {
   }
 
   move_buffer_ = new Move[buffer_partition_size_ * buffer_num_partitions_];
+
+  if (options_.enable_nnue) {
+    nnue_ = std::make_unique<NNUE>(options_.nnue_weights_filepath);
+  }
 }
 
 AlphaBetaPlayer::~AlphaBetaPlayer() {
@@ -208,9 +212,9 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
 
     // try the null move with possibly reduced depth
     PVInfo null_pvinfo;
-    int r = std::min(depth / 3 + 1, depth - 1);
+    int r = std::min(depth / 3 + 1, depth - 1) + 1;
     auto value_and_move_or = Search(
-        ss+1, NonPV, board, ply + 1, depth - r - 1,
+        ss+1, NonPV, board, ply + 1, depth - r,
         -beta, -beta + 1, !maximizing_player, expanded, deadline, null_pvinfo,
         null_moves + 1);
 
@@ -316,7 +320,8 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       quiets++;
     }
 
-    if (options_.enable_mobility_evaluation) {
+    if (options_.enable_mobility_evaluation
+        && !options_.enable_nnue) {
       player_mobility_scores_[player_color] = board.MobilityEvaluation(player);
     }
 
@@ -358,7 +363,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
           num_lmr_researches_++;
           value_and_move_or = Search(
               ss+1, NonPV, board, ply + 1, depth - 1 + e,
-              -beta, -alpha, !maximizing_player, expanded + e,
+              -(alpha + 1), -alpha, !maximizing_player, expanded + e,
               deadline, *child_pvinfo, null_moves, !isCutNode);
         }
       }
@@ -385,7 +390,9 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
 
     board.UndoMove();
 
-    if (options_.enable_mobility_evaluation) { // reset
+    if (options_.enable_mobility_evaluation
+        && !options_.enable_nnue) {
+      // reset
       player_mobility_scores_[player_color] = curr_mob_score;
     }
 
@@ -502,6 +509,11 @@ std::tuple<int, int> GetPieceStatistics(
 }  // namespace
 
 int AlphaBetaPlayer::Evaluate(Board& board, bool maximizing_player, int alpha, int beta) {
+  if (options_.enable_nnue) {
+    int eval = nnue_->Evaluate(board.GetTurn().GetColor());
+    return maximizing_player ? eval : -eval;
+  }
+
   int eval; // w.r.t. RY team
   GameResult game_result = board.CheckWasLastMoveKingCapture();
   if (game_result != IN_PROGRESS) { // game is over
@@ -515,9 +527,6 @@ int AlphaBetaPlayer::Evaluate(Board& board, bool maximizing_player, int alpha, i
   } else {
     // Piece evaluation
     eval = board.PieceEvaluation();
-
-//    // DEBUG: just use piece eval
-//    return maximizing_player ? eval : -eval;
 
     // Mobility evaluation
     if (options_.enable_mobility_evaluation) {
@@ -658,6 +667,9 @@ void AlphaBetaPlayer::ResetHistoryHeuristic() {
 }
 
 void AlphaBetaPlayer::ResetMobilityScores(Board& board) {
+  if (options_.enable_nnue) {
+    return;
+  }
   // reset pseudo-mobility scores
   if (options_.enable_mobility_evaluation) {
     for (int i = 0; i < 4; i++) {
@@ -671,6 +683,13 @@ std::optional<std::tuple<int, std::optional<Move>, int>> AlphaBetaPlayer::MakeMo
     Board& board,
     std::optional<std::chrono::milliseconds> time_limit,
     int max_depth) {
+
+  std::optional<std::chrono::time_point<std::chrono::system_clock>> deadline;
+  auto start = std::chrono::system_clock::now();
+  if (time_limit.has_value()) {
+    deadline = start + time_limit.value();
+  }
+
   // Use Alpha-Beta search with iterative deepening
 
   if (options_.max_search_depth.has_value()) {
@@ -681,13 +700,16 @@ std::optional<std::tuple<int, std::optional<Move>, int>> AlphaBetaPlayer::MakeMo
     ResetHistoryHeuristic();
   }
 
-  std::optional<std::chrono::time_point<std::chrono::system_clock>> deadline;
-  auto start = std::chrono::system_clock::now();
-  if (time_limit.has_value()) {
-    deadline = start + time_limit.value();
+  if (options_.enable_nnue) {
+    std::vector<PlacedPiece> pp;
+    for (const auto& placed_pieces : board.GetPieceList()) {
+      pp.insert(pp.end(), placed_pieces.begin(), placed_pieces.end());
+    }
+    nnue_->InitializeWeights(pp);
+    board.SetNNUE(nnue_.get());
+  } else {
+    ResetMobilityScores(board);
   }
-
-  ResetMobilityScores(board);
 
   int next_depth = std::min(1 + pv_info_.GetDepth(), max_depth);
   std::optional<std::tuple<int, std::optional<Move>>> res;
@@ -716,6 +738,10 @@ std::optional<std::tuple<int, std::optional<Move>, int>> AlphaBetaPlayer::MakeMo
     if (std::abs(evaluation) == kMateValue) {
       break;  // Proven win/loss
     }
+  }
+
+  if (options_.enable_nnue) {
+    board.SetNNUE(nullptr);
   }
 
   if (res.has_value()) {

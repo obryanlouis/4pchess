@@ -24,3 +24,8 @@ todo.txt
 nohup*
 api_key*.txt
 __pycache__*
+models*
+data
+data*
+games*
+**/.ipynb_checkpoints

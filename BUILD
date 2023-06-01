@@ -1,8 +1,21 @@
+package(default_visibility=[
+    "//visibility:public",
+])
+
+cc_library(
+    name = "types",
+    hdrs = ["types.h"],
+    srcs = ["types.cc"],
+)
 
 cc_library(
     name = "board",
     hdrs = ["board.h"],
     srcs = ["board.cc"],
+    deps = [
+        ":types",
+        "//nnue",
+    ],
 )
 
 cc_test(

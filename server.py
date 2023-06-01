@@ -123,7 +123,7 @@ class Server:
 
         clock_ms = float(json_response['clock'])
         assert self._pgn4_info is not None
-        buffer_ms = 1000
+        buffer_ms = 500
         move_time_ms = self._pgn4_info.incr_time_ms - buffer_ms
         min_remaining_ms = 30000
         if clock_ms > min_remaining_ms:

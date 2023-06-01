@@ -1,9 +1,11 @@
-#include <functional>
 #include <chrono>
-#include <vector>
+#include <filesystem>
+#include <fstream>
+#include <functional>
 #include <iostream>
 #include <mutex>
 #include <thread>
+#include <vector>
 
 #include "board.h"
 #include "player.h"
@@ -13,19 +15,83 @@ namespace chess {
 constexpr int kNumGames = 100;
 constexpr int kMaxMovesPerGame = 100;
 constexpr int kNumThreads = 12;
-constexpr int kMoveTimeLimitMs = 12000;
+constexpr int kMoveTimeLimitMs = 100;
+
+namespace {
+
+enum GameResultStatus {
+  GAME_ENDED,  // game ended normally (win/loss/stalemate)
+  MOVE_LIMIT,  // performed max # moves
+  TIMEOUT,  // player failed to move in time
+  MISSING_MOVE,  // player failed to return a move
+  WINNING_EVAL,  // piece evaluation is too large
+};
+
+void SaveGame(
+    std::string filepath,
+    const std::vector<Move>& moves,
+    bool player2_moves_first,
+    float player2_score,
+    GameResultStatus game_status) {
+  std::fstream fs;
+  fs.open(filepath, std::fstream::out);
+  int first_player_id = player2_moves_first ? 2 : 1;
+  fs << "[Player " << first_player_id << " moves first]" << std::endl;
+  fs << "[Player 2 score: " << player2_score << "]" << std::endl;
+  fs << "[Game result status: ";
+  switch (game_status) {
+  case GAME_ENDED:
+    fs << "game ended normally (win/loss/stalemate)";
+    break;
+  case MOVE_LIMIT:
+    fs << "move limit (" << kMaxMovesPerGame << " moves)";
+    break;
+  case TIMEOUT:
+    fs << "player timeout";
+    break;
+  case MISSING_MOVE:
+    fs << "player missing move";
+    break;
+  case WINNING_EVAL:
+    fs << "winning eval";
+    break;
+  }
+  fs << "]" << std::endl;
+  for (int i = 0; i < (int)moves.size(); i++) {
+    if (i % 4 == 0) {
+      int move_id = 1 + i / 4;
+      fs << move_id << "." << " ";
+    }
+
+    const auto& move = moves[i];
+    fs << move.PrettyStr();
+
+    if (i % 4 == 3) {
+      fs << std::endl;
+    } else {
+      fs << " ";
+    }
+  }
+}
+
+}  // namespace
 
 class StrengthTest {
  public:
-  StrengthTest() {
+  StrengthTest(std::string save_dir) {
     if (kMoveTimeLimitMs <= 0) {
       move_time_limit_ = std::nullopt;
     } else {
       move_time_limit_ = std::chrono::milliseconds(kMoveTimeLimitMs);
     }
 
-    player1_options_.test = false;
-    player2_options_.test = true;
+    player1_options_.enable_piece_imbalance = false;
+    player2_options_.enable_piece_imbalance = true;
+    if (!save_dir.empty()) {
+      save_dir_ = std::filesystem::path(save_dir);
+      std::filesystem::remove_all(save_dir_.value());
+      std::filesystem::create_directory(save_dir_.value());
+    }
   }
 
   void Run() {
@@ -58,6 +124,7 @@ class StrengthTest {
       auto board = Board::CreateStandardSetup();
       bool player2_moves_first = game_id % 2 == 1;
       bool end_early = false;
+      GameResultStatus game_status = GAME_ENDED;
       for (int move_id = 0; move_id < kMaxMovesPerGame; move_id++) {
         bool player1_moves = ((game_id + move_id) % 2 == 0);
         auto* player_options = player1_moves
@@ -86,13 +153,16 @@ class StrengthTest {
           } else {
           }
           end_early = true;
+          game_status = GAME_ENDED;
           break;
         }
         if (!res.has_value() || !std::get<1>(res.value()).has_value()) {
           if (!res.has_value()) {
             std::cout << "player lost due to timeout" << std::endl;
+            game_status = TIMEOUT;
           } else {
             std::cout << "player lost due to missing move" << std::endl;
+            game_status = MISSING_MOVE;
           }
           // player failed to move -- they lose
           if ((game_id % 2) == (move_id % 2)) {
@@ -104,13 +174,17 @@ class StrengthTest {
         auto move = std::get<1>(res.value()).value();
         board->MakeMove(move);
         int piece_eval = board->PieceEvaluation();
-        if (std::abs(piece_eval) >= 30) {
+        if (std::abs(piece_eval) >= 30'000) {
           if ((piece_eval > 0) == player2_moves_first) {
             player2_score += 1;
           }
           end_early = true;
+          game_status = WINNING_EVAL;
           break;
         }
+      }
+      if (board->NumMoves() == kMaxMovesPerGame) {
+        game_status = MOVE_LIMIT;
       }
       if (!end_early) {
         int piece_eval = board->PieceEvaluation();
@@ -123,6 +197,11 @@ class StrengthTest {
         }
       }
 
+      if (save_dir_.has_value()) {
+        std::filesystem::path filepath = save_dir_.value() / ("game_" + std::to_string(game_id) + ".pgn");
+        SaveGame(filepath, board->Moves(), player2_moves_first,
+            player2_score, game_status);
+      }
       FinishGame(player2_score);
     }
   }
@@ -160,17 +239,23 @@ class StrengthTest {
   int player1_total_search_depth_ = 0;
   int player2_num_searches_ = 0;
   int player2_total_search_depth_ = 0;
+  std::optional<std::filesystem::path> save_dir_;
 };
 
-void RunStrengthTest() {
-  StrengthTest test;
+void RunStrengthTest(std::string save_dir) {
+  StrengthTest test(save_dir);
   test.Run();
 }
 
 }
 
 int main(int argc, char* argv[]) {
-  chess::RunStrengthTest();
+  std::string save_dir;
+  if (argc > 1) {
+    save_dir = std::string(argv[1]);
+    std::cout << "Will save games to dir: " << save_dir << std::endl;
+  }
+  chess::RunStrengthTest(save_dir);
   return 0;
 }
 
