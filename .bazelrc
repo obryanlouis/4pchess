@@ -3,4 +3,6 @@ build:linux --cxxopt='-std=c++17'
 build:linux --cxxopt='-mavx2'
 build:windows --cxxopt='/std:c++latest'
 build:windows --cxxopt='/arch:AVX2'
+build:macos --cxxopt='-std=c++17'
+build:macos --cxxopt='-mavx2'
 

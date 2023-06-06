@@ -1,9 +1,10 @@
 #include "nnue.h"
 
-#include <iostream>
 #include <cmath>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 #include <sstream>
 #include <string>
 
@@ -19,7 +20,8 @@ int ceil_div(int x, int y) {
 
 }  // namespace
 
-NNUE::NNUE(std::string weights_dir) {
+NNUE::NNUE(std::string weights_dir,
+           std::shared_ptr<NNUE> copy_weights_from) {
   num_layers_ = 4;
   // NOTE: We could load the layer sizes from a file.
   layer_sizes_ = new int[4] { 32, 32, 32, 1 };
@@ -47,6 +49,34 @@ NNUE::NNUE(std::string weights_dir) {
     bias_[layer_id] = new float[out_size];
   }
 
+  if (copy_weights_from != nullptr) {
+    CopyWeights(*copy_weights_from.get());
+  } else {
+    LoadWeightsFromFile(weights_dir);
+  }
+  CopyWeightsToAvxVectors();
+
+}
+
+void NNUE::CopyWeights(const NNUE& copy_from) {
+  for (int layer_id = 0; layer_id < num_layers_; layer_id++) {
+    int in_size = input_sizes_[layer_id];
+    int out_size = layer_sizes_[layer_id];
+    for (int id = 0; id < in_size; id++) {
+      std::memcpy(
+          copy_from.kernel_[layer_id][id],
+          kernel_[layer_id][id],
+          out_size);
+    }
+
+    std::memcpy(
+        copy_from.bias_[layer_id],
+        bias_[layer_id],
+        out_size);
+  }
+}
+
+void NNUE::LoadWeightsFromFile(const std::string& weights_dir) {
   // load weights from files
   std::filesystem::path wpath(weights_dir);
   std::string line;
@@ -55,6 +85,10 @@ NNUE::NNUE(std::string weights_dir) {
     // kernel
     std::string kernel_filename = "layer_" + std::to_string(layer_id) + ".kernel";
     std::ifstream kernel_infile(wpath / kernel_filename);
+    if (!kernel_infile.good()) {
+      std::cout << "Can't open kernel file: " << kernel_filename << std::endl;
+      abort();
+    }
     while (std::getline(kernel_infile, line)) {
       std::istringstream ss(line);
       // shape: [layer_sizes[layer_id-1]][layer_sizes[layer_id]]
@@ -69,6 +103,10 @@ NNUE::NNUE(std::string weights_dir) {
     // bias
     std::string bias_filename = "layer_" + std::to_string(layer_id) + ".bias";
     std::ifstream bias_infile(wpath / bias_filename);
+    if (!bias_infile.good()) {
+      std::cout << "Can't open bias file: " << bias_filename << std::endl;
+      abort();
+    }
     while (std::getline(bias_infile, line)) {
       std::istringstream ss(line);
       // shape: layer_sizes[layer_id]
@@ -78,6 +116,9 @@ NNUE::NNUE(std::string weights_dir) {
       }
     }
   }
+}
+
+void NNUE::CopyWeightsToAvxVectors() {
 
 #if defined __AVX2__ && USE_AVX2
   avx2_linear_output_0_ = new __m256*[4];
@@ -129,7 +170,6 @@ NNUE::NNUE(std::string weights_dir) {
   }
 
 #endif
-
 }
 
 NNUE::~NNUE() {
@@ -147,7 +187,8 @@ NNUE::~NNUE() {
       delete[] avx2_l_output_[layer_id];
     }
     if (avx2_kernel_rowwise_[layer_id] != nullptr) {
-      for (int id = 0; id < layer_sizes_[layer_id - 1]; id++) {
+      int in_size = input_sizes_[layer_id];
+      for (int id = 0; id < in_size; id++) {
         delete[] avx2_kernel_rowwise_[layer_id][id];
       }
       delete[] avx2_kernel_rowwise_[layer_id];
@@ -180,7 +221,8 @@ NNUE::~NNUE() {
       delete[] l_output_[layer_id];
     }
     if (kernel_[layer_id] != nullptr) {
-      for (int id = 0; id < layer_sizes_[layer_id - 1]; id++) {
+      int in_size = input_sizes_[layer_id];
+      for (int id = 0; id < in_size; id++) {
         delete[] kernel_[layer_id][id];
       }
       delete[] kernel_[layer_id];
@@ -191,6 +233,7 @@ NNUE::~NNUE() {
   delete[] kernel_;
   delete[] layer_sizes_;
   delete[] input_sizes_;
+
 }
 
 void NNUE::InitializeWeights(const std::vector<PlacedPiece>& placed_pieces) {

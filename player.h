@@ -79,7 +79,9 @@ enum NodeType {
 
 class AlphaBetaPlayer {
  public:
-  AlphaBetaPlayer(std::optional<PlayerOptions> options = std::nullopt);
+  AlphaBetaPlayer(
+      std::optional<PlayerOptions> options = std::nullopt,
+      std::shared_ptr<NNUE> copy_from_nnue = nullptr);
   std::optional<std::tuple<int, std::optional<Move>, int>> MakeMove(
       Board& board,
       std::optional<std::chrono::milliseconds> time_limit = std::nullopt,

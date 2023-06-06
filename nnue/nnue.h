@@ -1,8 +1,9 @@
 #ifndef __NNUE_H__
 #define __NNUE_H__
 
-#include <vector>
 #include <immintrin.h>
+#include <memory>
+#include <vector>
 
 #include "../types.h"
 
@@ -10,7 +11,8 @@ namespace chess {
 
 class NNUE {
  public:
-  NNUE(std::string weights_dir);
+  NNUE(std::string weights_dir,
+       std::shared_ptr<NNUE> copy_weights_from = nullptr);
   ~NNUE();
 
   void InitializeWeights(const std::vector<PlacedPiece>& placed_pieces);
@@ -21,6 +23,9 @@ class NNUE {
 
  private:
   void ComputeLayer0Activation();
+  void CopyWeights(const NNUE& copy_from);
+  void LoadWeightsFromFile(const std::string& weights_dir);
+  void CopyWeightsToAvxVectors();
 
   int num_layers_ = 0;
   int* layer_sizes_ = nullptr;

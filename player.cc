@@ -16,7 +16,9 @@
 
 namespace chess {
 
-AlphaBetaPlayer::AlphaBetaPlayer(std::optional<PlayerOptions> options) {
+AlphaBetaPlayer::AlphaBetaPlayer(
+    std::optional<PlayerOptions> options,
+    std::shared_ptr<NNUE> copy_from_nnue) {
   if (options.has_value()) {
     options_ = options.value();
   }
@@ -80,8 +82,13 @@ AlphaBetaPlayer::AlphaBetaPlayer(std::optional<PlayerOptions> options) {
 
   move_buffer_ = new Move[buffer_partition_size_ * buffer_num_partitions_];
 
+  if (options_.nnue_weights_filepath.empty()) {
+    options_.enable_nnue = false;
+  }
+
   if (options_.enable_nnue) {
-    nnue_ = std::make_unique<NNUE>(options_.nnue_weights_filepath);
+    nnue_ = std::make_unique<NNUE>(
+        options_.nnue_weights_filepath, copy_from_nnue);
   }
 }
 

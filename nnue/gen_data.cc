@@ -67,6 +67,7 @@ std::unique_ptr<std::fstream> OpenFile(const std::string& filepath) {
   auto fs = std::make_unique<std::fstream>();
   fs->open(filepath, std::fstream::out | std::fstream::app);
   if (fs->fail()) {
+    std::cout << "Can't open file: " << filepath << std::endl;
     abort();
   }
   return fs;
@@ -212,12 +213,17 @@ std::shared_ptr<Board> CreateBoardFromRandomFEN() {
   return std::make_shared<Board>(turn, std::move(location_to_piece));
 }
 
-std::shared_ptr<Board> CreateBoardFromRandomMoves() {
+std::shared_ptr<Board> CreateBoardFromRandomMoves(
+    const std::string& nnue_weights_filepath,
+    std::shared_ptr<NNUE> copy_weights_from) {
   auto board = Board::CreateStandardSetup();
   // sample several moves from a weak player
   PlayerOptions options;
-  options.enable_nnue = true;
-  AlphaBetaPlayer player(options);
+  if (copy_weights_from != nullptr) {
+    options.enable_nnue = true;
+    options.nnue_weights_filepath = nnue_weights_filepath;
+  }
+  AlphaBetaPlayer player(options, copy_weights_from);
 
   int num_random_moves = RandInt(9);
   int time_limit_ms = 10 + RandInt(30);
@@ -225,7 +231,7 @@ std::shared_ptr<Board> CreateBoardFromRandomMoves() {
   for (int i = 0; i < num_random_moves; i++) {
     auto res = player.MakeMove(*board, time_limit);
     if (!res.has_value() // timeout
-        || !std::get<1>(res.value()) // missing move
+        || !std::get<1>(res.value()).has_value() // missing move
         ) {
       break; // should never really happen, but if so just break
     }
@@ -236,11 +242,13 @@ std::shared_ptr<Board> CreateBoardFromRandomMoves() {
   return board;
 }
 
-std::shared_ptr<Board> CreateRandomStartPosition() {
+std::shared_ptr<Board> CreateRandomStartPosition(
+    const std::string& nnue_weights_filepath,
+    std::shared_ptr<NNUE> copy_weights_from) {
   if (RandFloat() < kRandomFENRate) {
     return CreateBoardFromRandomFEN();
   }
-  return CreateBoardFromRandomMoves();
+  return CreateBoardFromRandomMoves(nnue_weights_filepath, copy_weights_from);
 }
 
 }  // namespace
@@ -253,10 +261,15 @@ class GenData {
     : depth_(depth), num_threads_(num_threads), num_samples_(num_samples),
       nnue_weights_filepath_(std::move(nnue_weights_filepath)) {
     enable_nnue_ = !nnue_weights_filepath_.empty();
+    if (enable_nnue_) {
+      copy_weights_from_ = std::make_shared<NNUE>(nnue_weights_filepath_);
+    }
   }
 
   void Run(const std::string& output_dir) {
+
     start_ = std::chrono::system_clock::now();
+
     std::vector<std::unique_ptr<std::thread>> threads;
     for (int i = 0; i < num_threads_; i++) {
       auto run_games = [this, i, &output_dir]() {
@@ -268,6 +281,7 @@ class GenData {
     for (int i = 0; i < num_threads_; i++) {
       threads[i]->join();
     }
+
     auto duration = std::chrono::duration_cast<std::chrono::seconds>(
         std::chrono::system_clock::now() - start_);
     std::cout << "Duration (sec): " << duration.count() << std::endl;
@@ -284,11 +298,12 @@ class GenData {
     PlayerOptions options;
     options.enable_nnue = enable_nnue_;
     options.nnue_weights_filepath = nnue_weights_filepath_;
-    AlphaBetaPlayer player(options);
+    AlphaBetaPlayer player(options, copy_weights_from_);
     std::shared_ptr<Board> board;
 
     while (positions_calculated_ < num_samples_) {
-      board = CreateRandomStartPosition();
+      board = CreateRandomStartPosition(
+          nnue_weights_filepath_, copy_weights_from_);
 
       int num_moves = 0;
       // loop until game over
@@ -389,9 +404,10 @@ class GenData {
   size_t num_samples_ = 0;
   std::mutex mutex_;
   std::atomic<size_t> positions_calculated_ = 0;
-  std::chrono::time_point<std::chrono::high_resolution_clock> start_;
+  std::chrono::time_point<std::chrono::system_clock> start_;
   bool enable_nnue_ = false;
   std::string nnue_weights_filepath_;
+  std::shared_ptr<NNUE> copy_weights_from_;
 
   size_t games_ry_won = 0;
   size_t games_bg_won = 0;
@@ -405,7 +421,7 @@ namespace {
 
 void PrintUsage() {
   std::cout << "Usage: <prog> /absolute/output_dir [depth] [num_threads]"
-    << " [num_samples]"
+    << " [num_samples] [nnue_weights_filepath]"
     << std::endl;
 }
 
