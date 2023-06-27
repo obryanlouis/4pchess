@@ -1469,11 +1469,11 @@ std::ostream& operator<<(
   return os;
 }
 
-//std::ostream& operator<<(
-//    std::ostream& os, const BoardLocation& location) {
-//  os << "Loc(" << (int)location.GetRow() << ", " << (int)location.GetCol() << ")";
-//  return os;
-//}
+std::ostream& operator<<(
+    std::ostream& os, const BoardLocation& location) {
+  os << "Loc(" << (int)location.GetRow() << ", " << (int)location.GetCol() << ")";
+  return os;
+}
 
 std::ostream& operator<<(std::ostream& os, const Move& move) {
   os << "Move(" << move.From() << " -> " << move.To() << ")";
@@ -1553,12 +1553,12 @@ Team OtherTeam(Team team) {
   return team == RED_YELLOW ? BLUE_GREEN : RED_YELLOW;
 }
 
-//std::string BoardLocation::PrettyStr() const {
-//  std::string s;
-//  s += ('a' + GetCol());
-//  s += std::to_string(14 - GetRow());
-//  return s;
-//}
+std::string BoardLocation::PrettyStr() const {
+  std::string s;
+  s += ('a' + GetCol());
+  s += std::to_string(14 - GetRow());
+  return s;
+}
 
 std::string Move::PrettyStr() const {
   return from_.PrettyStr() + "-" + to_.PrettyStr();
