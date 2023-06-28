@@ -21,6 +21,8 @@ namespace chess {
 
 constexpr char kEngineName[] = "4pChess 0.1";
 constexpr char kAuthorName[] = "Louis O.";
+constexpr char kNNUEModelPath[] = "/home/louis/4pchess/data/gen_models/gen_380";
+//constexpr char kNNUEModelPath[] = "/home/louis/4pchess/d4/models";
 
 using std::chrono::milliseconds;
 using std::chrono::system_clock;
@@ -86,7 +88,10 @@ void CommandLine::StopEvaluation() {
 
 void CommandLine::ResetPlayer() {
   std::lock_guard lock(mutex_);
-  player_ = std::make_shared<AlphaBetaPlayer>();
+  PlayerOptions options;
+  options.enable_nnue = true;
+  options.nnue_weights_filepath = kNNUEModelPath;
+  player_ = std::make_shared<AlphaBetaPlayer>(options);
 }
 
 void CommandLine::ResetBoard() {

@@ -15,7 +15,9 @@ namespace {
 constexpr int kNumThreads = 12;
 constexpr int kNumSamples = 1'000'000;
 constexpr int kDepth = 4;
-constexpr float kRandomFENRate = 0.2;
+constexpr float kRandomMoveRate = 0.05;
+constexpr float kRandomFENRate = 0.0;// 0.2;
+constexpr float kRandomNoNNUERate = 0.5;
 constexpr int kMaxMovesPerGame = 300;
 
 }  // namespace
@@ -228,15 +230,22 @@ std::shared_ptr<Board> CreateBoardFromRandomMoves(
   int num_random_moves = RandInt(9);
   int time_limit_ms = 10 + RandInt(30);
   std::chrono::milliseconds time_limit(time_limit_ms);
+  Move buffer[300];
   for (int i = 0; i < num_random_moves; i++) {
-    auto res = player.MakeMove(*board, time_limit);
-    if (!res.has_value() // timeout
-        || !std::get<1>(res.value()).has_value() // missing move
-        ) {
-      break; // should never really happen, but if so just break
+    if (RandFloat() < 1.0) {
+      size_t n_moves = board->GetPseudoLegalMoves2(buffer, 300);
+      int move_id = RandInt(n_moves);
+      board->MakeMove(buffer[move_id]);
+    } else {
+      auto res = player.MakeMove(*board, time_limit);
+      if (!res.has_value() // timeout
+          || !std::get<1>(res.value()).has_value() // missing move
+          ) {
+        break; // should never really happen, but if so just break
+      }
+      const auto& move = std::get<1>(res.value()).value();
+      board->MakeMove(move);
     }
-    const auto& move = std::get<1>(res.value()).value();
-    board->MakeMove(move);
   }
 
   return board;
@@ -257,9 +266,10 @@ class GenData {
  public:
 
   GenData(int depth, int num_threads, int num_samples,
-      std::string nnue_weights_filepath)
+      std::string nnue_weights_filepath, float nnue_search_rate)
     : depth_(depth), num_threads_(num_threads), num_samples_(num_samples),
-      nnue_weights_filepath_(std::move(nnue_weights_filepath)) {
+      nnue_weights_filepath_(std::move(nnue_weights_filepath)),
+      nnue_search_rate_(nnue_search_rate) {
     enable_nnue_ = !nnue_weights_filepath_.empty();
     if (enable_nnue_) {
       copy_weights_from_ = std::make_shared<NNUE>(nnue_weights_filepath_);
@@ -298,12 +308,21 @@ class GenData {
     PlayerOptions options;
     options.enable_nnue = enable_nnue_;
     options.nnue_weights_filepath = nnue_weights_filepath_;
-    AlphaBetaPlayer player(options, copy_weights_from_);
+    PlayerOptions options_without_nnue;
+    options.enable_nnue = false;
     std::shared_ptr<Board> board;
+    Move buffer[300];
 
     while (positions_calculated_ < num_samples_) {
-      board = CreateRandomStartPosition(
-          nnue_weights_filepath_, copy_weights_from_);
+      AlphaBetaPlayer player(options, copy_weights_from_);
+      AlphaBetaPlayer player_without_nnue(options_without_nnue);
+
+      board = Board::CreateStandardSetup();
+      //board = CreateRandomStartPosition(
+      //    nnue_weights_filepath_, copy_weights_from_);
+      if (copy_weights_from_ != nullptr) {
+        board->SetNNUE(copy_weights_from_.get());
+      }
 
       int num_moves = 0;
       // loop until game over
@@ -323,13 +342,17 @@ class GenData {
         }
         std::vector<int> per_depth_score;
         per_depth_score.reserve(depth_ + 1);
-        player.ResetMobilityScores(*board);
-        int score = player.Evaluate(*board, true);
+
+        AlphaBetaPlayer* p =
+          RandFloat() <= nnue_search_rate_ ? &player : &player_without_nnue;
+
+        p->ResetMobilityScores(*board);
+        int score = p->Evaluate(*board, true);
         per_depth_score.push_back(score);
         std::optional<Move> move;
         PlayerColor color = board->GetTurn().GetColor();
         for (int depth = 1; depth <= depth_; depth++) {
-          auto res = player.MakeMove(*board, /*time_limit=*/std::nullopt, depth).value();
+          auto res = p->MakeMove(*board, /*time_limit=*/std::nullopt, depth).value();
           score = std::get<0>(res);
 
           // Output scores w.r.t. the current perspective
@@ -349,7 +372,13 @@ class GenData {
             board->GetTurn(), score, per_depth_score);
         IncrementStats();
         num_moves++;
-        board->MakeMove(move.value());
+        if (RandFloat() < kRandomMoveRate) {
+          size_t n_moves = board->GetPseudoLegalMoves2(buffer, 300);
+          int rand_move = RandInt(n_moves);
+          board->MakeMove(buffer[rand_move]);
+        } else {
+          board->MakeMove(move.value());
+        }
       }
 
     }
@@ -408,6 +437,7 @@ class GenData {
   bool enable_nnue_ = false;
   std::string nnue_weights_filepath_;
   std::shared_ptr<NNUE> copy_weights_from_;
+  float nnue_search_rate_ = 0;
 
   size_t games_ry_won = 0;
   size_t games_bg_won = 0;
@@ -470,7 +500,13 @@ int main(int argc, char** argv) {
     nnue_weights_filepath = std::string(argv[5]);
   }
 
-  chess::GenData gen_data(depth, num_threads, num_samples, nnue_weights_filepath);
+  float nnue_search_rate = 0.5;
+  if (argc >= 7) {
+    nnue_search_rate = std::atof(argv[6]);
+  }
+
+  chess::GenData gen_data(depth, num_threads, num_samples, nnue_weights_filepath,
+      nnue_search_rate);
   gen_data.Run(output_dir);
   return 0;
 }

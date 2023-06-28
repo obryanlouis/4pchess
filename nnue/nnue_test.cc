@@ -48,6 +48,29 @@ TEST(NNUE, CorrectnessTest) {
   std::cout << "pred score: " << pred_score << std::endl;
 }
 
+TEST(NNUE, CopyWeightsTest) {
+  std::string weights_dir = "/home/louis/4pchess/models";
+  auto copy_from = std::make_shared<NNUE>(weights_dir);
+  NNUE nnue(weights_dir, copy_from);
+
+  constexpr int kNumEvals = 1000000;
+
+  auto board = Board::CreateStandardSetup();
+  board->SetNNUE(&nnue);
+
+  std::vector<PlacedPiece> pp;
+  for (const auto& placed_pieces : board->GetPieceList()) {
+    pp.insert(pp.end(), placed_pieces.begin(), placed_pieces.end());
+  }
+  nnue.InitializeWeights(pp);
+
+  board->MakeMove(Move(BoardLocation(13, 7), BoardLocation(12, 7)));
+
+  int pred_score = nnue.Evaluate(YELLOW);
+
+  std::cout << "pred score: " << pred_score << std::endl;
+}
+
 TEST(NNUE, NaiveFloatTest) {
   auto start = std::chrono::system_clock::now();
 

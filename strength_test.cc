@@ -15,7 +15,7 @@ namespace chess {
 constexpr int kNumGames = 100;
 constexpr int kMaxMovesPerGame = 100;
 constexpr int kNumThreads = 12;
-constexpr int kMoveTimeLimitMs = 100;
+constexpr int kMoveTimeLimitMs = 5000;
 
 namespace {
 
@@ -84,14 +84,21 @@ class StrengthTest {
     } else {
       move_time_limit_ = std::chrono::milliseconds(kMoveTimeLimitMs);
     }
-
-    player1_options_.enable_piece_imbalance = false;
-    player2_options_.enable_piece_imbalance = true;
     if (!save_dir.empty()) {
       save_dir_ = std::filesystem::path(save_dir);
       std::filesystem::remove_all(save_dir_.value());
       std::filesystem::create_directory(save_dir_.value());
     }
+
+    // 380: wins 62% of the time against no NNUE
+    // 542: wins 66% of the time against no NNUE
+    // 553: wins 48% of the time against no NNUE
+
+    //player1_options_.enable_nnue = false;
+    player1_options_.enable_nnue = true;
+    player1_options_.nnue_weights_filepath = "/home/louis/4pchess/data/gen_models/gen_542";
+    player2_options_.enable_nnue = true;
+    player2_options_.nnue_weights_filepath = "/home/louis/4pchess/d4/models";
   }
 
   void Run() {
