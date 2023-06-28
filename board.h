@@ -533,6 +533,7 @@ class Board {
     return moves_.back();
   }
   int NumMoves() const { return moves_.size(); }
+  const std::vector<Move>& Moves() { return moves_; }
 
 
   void GetPawnMoves2(
