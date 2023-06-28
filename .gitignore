@@ -30,5 +30,6 @@ data*
 games*
 **/.ipynb_checkpoints
 
-#
 .vs/
+d2
+d3

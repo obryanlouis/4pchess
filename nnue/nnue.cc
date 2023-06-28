@@ -64,15 +64,15 @@ void NNUE::CopyWeights(const NNUE& copy_from) {
     int out_size = layer_sizes_[layer_id];
     for (int id = 0; id < in_size; id++) {
       std::memcpy(
-          copy_from.kernel_[layer_id][id],
           kernel_[layer_id][id],
-          out_size);
+          copy_from.kernel_[layer_id][id],
+          out_size * sizeof(float));
     }
 
     std::memcpy(
-        copy_from.bias_[layer_id],
         bias_[layer_id],
-        out_size);
+        copy_from.bias_[layer_id],
+        out_size * sizeof(float));
   }
 }
 

@@ -137,6 +137,7 @@ class Player : public MyObjectWrap {
   // keep track of the last player & its board to reuse it and save time on
   // consecutive searches.
   static std::shared_ptr<chess::AlphaBetaPlayer> last_player_;
+  static std::shared_ptr<chess::NNUE> nnue_;
   static int64_t last_board_hash_;
 
   static void AddToGlobalObjList(Player* obj);
@@ -146,6 +147,7 @@ class Player : public MyObjectWrap {
                               int64_t board_hash);
   static std::shared_ptr<chess::AlphaBetaPlayer> GetLatestPlayer(
       int64_t board_hash);
+  static std::shared_ptr<chess::NNUE> GetNNUE();
 
   std::shared_ptr<chess::AlphaBetaPlayer> player_;
 };

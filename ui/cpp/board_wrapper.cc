@@ -1,14 +1,15 @@
 #include "board_wrapper.h"
 
-#include <memory>
-#include <mutex>
 #include <chrono>
 #include <cmath>
+#include <filesystem>
+#include <iostream>
+#include <memory>
+#include <mutex>
+#include <sstream>
 #include <string>
 #include <unordered_map>
 #include <vector>
-#include <sstream>
-#include <iostream>
 
 namespace board_wrapper {
 
@@ -36,7 +37,12 @@ using v8::Value;
 std::mutex Player::mutex_;
 std::vector<Player*> Player::players_;
 std::shared_ptr<chess::AlphaBetaPlayer> Player::last_player_;
+std::shared_ptr<chess::NNUE> Player::nnue_;
 int64_t Player::last_board_hash_;
+// TODO: make this configurable.
+constexpr char kNNUEWeightsFilepath[] = "";
+//constexpr char kNNUEWeightsFilepath[] = "/home/louis/4pchess/d4/models";
+//constexpr char kNNUEWeightsFilepath[] = "/home/louis/4pchess/data/gen_models/gen_380";
 
 
 PlacedPiece::PlacedPiece(v8::Isolate* isolate, int row, int col, int piece_type, int player_color)
@@ -351,7 +357,11 @@ void Player::MakeMove(const v8::FunctionCallbackInfo<v8::Value>& args) {
   if (player_ptr == nullptr) {
     player_ptr = GetLatestPlayer(board_hash);
     if (player_ptr == nullptr) {
-      player_ptr = std::make_shared<chess::AlphaBetaPlayer>();
+      chess::PlayerOptions options;
+      options.enable_nnue = true;
+      options.nnue_weights_filepath = kNNUEWeightsFilepath;
+      auto nnue = GetNNUE();
+      player_ptr = std::make_shared<chess::AlphaBetaPlayer>(options, nnue);
     }
     player_wrap->SetPlayer(player_ptr);
   }
@@ -521,6 +531,18 @@ std::shared_ptr<chess::AlphaBetaPlayer> Player::GetLatestPlayer(
     return last_player_;
   }
   return nullptr;
+}
+
+std::shared_ptr<chess::NNUE> Player::GetNNUE() {
+  std::lock_guard lock(mutex_);
+  if (nnue_ == nullptr) {
+    std::string nnue_weights_filepath = kNNUEWeightsFilepath;
+    if (std::filesystem::exists(nnue_weights_filepath)) {
+      std::cout << "Create NNUE from filepath: " << nnue_weights_filepath << std::endl;
+      nnue_ = std::make_shared<chess::NNUE>(nnue_weights_filepath);
+    }
+  }
+  return nnue_;
 }
 
 
