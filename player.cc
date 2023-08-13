@@ -35,10 +35,10 @@ AlphaBetaPlayer::AlphaBetaPlayer(std::optional<PlayerOptions> options) {
   piece_move_order_scores_[KING] = 0;
 
   king_attacker_values_[PAWN] = 0;
-  king_attacker_values_[KNIGHT] = 60;
-  king_attacker_values_[BISHOP] = 80;
-  king_attacker_values_[ROOK] = 100;
-  king_attacker_values_[QUEEN] = 160;
+  king_attacker_values_[KNIGHT] = 30;
+  king_attacker_values_[BISHOP] = 30;
+  king_attacker_values_[ROOK] = 40;
+  king_attacker_values_[QUEEN] = 50;
   king_attacker_values_[KING] = 0;
 
   if (options_.enable_transposition_table) {
@@ -79,6 +79,89 @@ AlphaBetaPlayer::AlphaBetaPlayer(std::optional<PlayerOptions> options) {
   }
 
   move_buffer_ = new Move[buffer_partition_size_ * buffer_num_partitions_];
+
+  if (options_.enable_piece_square_table) {
+    for (int cl = 0; cl < 4; cl++) {
+      PlayerColor color = static_cast<PlayerColor>(cl);
+      for (int pt = 0; pt < 6; pt++) {
+        PieceType piece_type = static_cast<PieceType>(pt);
+        bool is_piece = (piece_type == QUEEN || piece_type == ROOK
+                         || piece_type == BISHOP || piece_type == KNIGHT);
+
+        for (int row = 0; row < 14; row++) {
+          for (int col = 0; col < 14; col++) {
+            int table_value = 0;
+
+            if (is_piece) {
+              // back rank penalties
+              bool back_rank = (color == RED && row == 13)
+                            || (color == YELLOW && row == 0)
+                            || (color == BLUE && col == 0)
+                            || (color == GREEN && col == 13);
+              if (back_rank) {
+                table_value -= 25;
+              }
+
+              // preference for centrality
+              float center_dist = std::sqrt((row - 6.5) * (row - 6.5)
+                                          + (col - 6.5) * (col - 6.5));
+              table_value -= (int)(10 * center_dist);
+
+              // preference for pieces on opponent team's back-3 rank
+              if (color == RED || color == YELLOW) {
+                if (col < 3 || col >= 11) {
+                  table_value += 35;
+                }
+              } else {
+                if (row < 3 || row >= 11) {
+                  table_value += 35;
+                }
+              }
+
+            } else if (piece_type == PAWN) {
+              // prefer moving rook pawns twice
+              switch (color) {
+              case RED:
+                if ((col == 3 || col == 10) && row == 10) {
+                  table_value += 15;
+                }
+                break;
+              case YELLOW:
+                if ((col == 3 || col == 10) && row == 3) {
+                  table_value += 15;
+                }
+                break;
+              case BLUE:
+                if ((row == 3 || row == 10) && col == 3) {
+                  table_value += 15;
+                }
+                break;
+              case GREEN:
+                if ((row == 3 || row == 10) && col == 10) {
+                  table_value += 15;
+                }
+                break;
+              default:
+                break;
+              }
+            }
+
+            piece_square_table_[color][piece_type][row][col] = table_value;
+          }
+        }
+      }
+    }
+  }
+
+  if (options_.enable_piece_activation) {
+    piece_activation_threshold_[KING] = 999;
+    piece_activation_threshold_[PAWN] = 999;
+    piece_activation_threshold_[NO_PIECE] = 999;
+    piece_activation_threshold_[QUEEN] = 5;
+    piece_activation_threshold_[BISHOP] = 5;
+    piece_activation_threshold_[KNIGHT] = 3;
+    piece_activation_threshold_[ROOK] = 5;
+  }
 }
 
 AlphaBetaPlayer::~AlphaBetaPlayer() {
@@ -347,6 +430,16 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       num_lmr_searches_++;
 
       int r = Reduction(depth, move_count + 1);
+
+      if (options_.test
+          //&& ply >= 4
+          ) {
+        r++;
+        //r += depth/2;
+        //r += 1 + ply/3;
+        //r *= 2;
+      }
+
       r = std::clamp(r, 0, depth - 2);
       value_and_move_or = Search(
           ss+1, NonPV, board, ply + 1, depth - 1 - r + e,
@@ -479,7 +572,7 @@ constexpr int kPieceImbalanceTable[16] = {
   -800, -800, -800, -800, -800, -800, -800, -800,
 };
 
-std::tuple<int, int> GetPieceStatistics(
+std::tuple<int, float> GetPieceStatistics(
     const std::vector<PlacedPiece>& pieces,
     PlayerColor color) {
   int num_major = 0;
@@ -496,6 +589,9 @@ std::tuple<int, int> GetPieceStatistics(
     }
   }
   float avg_center_dist = sum_center_dist / std::max(num_major, 1);
+//  std::cout << "len(pieces): " << pieces.size()
+//            << " avg_center_dist: " << avg_center_dist
+//            << std::endl;
   return std::make_tuple(num_major, avg_center_dist);
 }
 
@@ -516,7 +612,103 @@ int AlphaBetaPlayer::Evaluate(Board& board, bool maximizing_player, int alpha, i
     // Piece evaluation
     eval = board.PieceEvaluation();
 
-//    // DEBUG: just use piece eval
+    if (options_.enable_piece_square_table) {
+      const auto& piece_list = board.GetPieceList();
+      for (int color = 0; color < 4; color++) {
+        for (const auto& placed_piece : piece_list[color]) {
+          PieceType piece_type = placed_piece.GetPiece().GetPieceType();
+          const auto& loc = placed_piece.GetLocation();
+          int row = loc.GetRow();
+          int col = loc.GetCol();
+
+          if (color == RED || color == YELLOW) {
+            eval += piece_square_table_[color][piece_type][row][col];
+          } else {
+            eval -= piece_square_table_[color][piece_type][row][col];
+          }
+        }
+      }
+    }
+
+    if (options_.enable_piece_activation) {
+      int n_activated[4] = {0, 0, 0, 0};
+      int total_moves[4] = {0, 0, 0, 0};
+
+      Move* moves = GetNextMoveBufferPartition();
+
+      Player curr_player = board.GetTurn();
+      for (int color = 0; color < 4; color++) {
+        Player player(static_cast<PlayerColor>(color));
+        board.SetPlayer(player);
+        size_t num_moves = board.GetPseudoLegalMoves2(
+            moves, buffer_partition_size_);
+        total_moves[color] = num_moves;
+
+        auto piece_activated = [this](
+            int color, PieceType piece_type,
+            const BoardLocation& location, int n_moves) {
+          if (piece_type == KNIGHT) {
+            // activated so long as it's not on the back rank
+            int row = location.GetRow();
+            int col = location.GetCol();
+            bool back_rank = (color == RED && row == 13)
+                          || (color == YELLOW && row == 0)
+                          || (color == BLUE && col == 0)
+                          || (color == GREEN && col == 13);
+            return !back_rank;
+          }
+          return n_moves >= piece_activation_threshold_[piece_type];
+        };
+
+        // note: this computation is dependent on the implementation of
+        // Board::GetPseudoLegalMoves2, which adds all moves for a given
+        // piece/location at a time.
+        BoardLocation last_loc = BoardLocation::kNoLocation;
+        PieceType last_piece_type = NO_PIECE;
+        int n_pieces_activated = 0;
+        int n_moves = 0;
+        for (size_t move_id = 0; move_id < num_moves; move_id++) {
+          const auto& move = moves[move_id];
+          const auto& from = move.From();
+          const auto& piece = board.GetPiece(from);
+          PieceType piece_type = piece.GetPieceType();
+          if (piece_type == QUEEN || piece_type == ROOK || piece_type == BISHOP
+              || piece_type == KNIGHT) {
+            if (from != last_loc) {
+              if (piece_activated(color, last_piece_type, last_loc, n_moves)) {
+                n_pieces_activated++;
+              }
+              last_loc = from;
+              last_piece_type = piece_type;
+              n_moves = 0;
+            }
+            n_moves++;
+          }
+        }
+        if (piece_activated(color, last_piece_type, last_loc, n_moves)) {
+          n_pieces_activated++;
+        }
+        n_activated[color] = n_pieces_activated;
+      }
+      board.SetPlayer(curr_player);
+
+      ReleaseMoveBufferPartition();
+
+      auto team_activation_score = [](int n_player1, int n_player2) {
+        constexpr int A = 25;
+        constexpr int B = 15;
+        return A * (n_player1 + n_player2) + B * n_player1 * n_player2;
+      };
+
+      eval += team_activation_score(n_activated[RED], n_activated[YELLOW])
+            - team_activation_score(n_activated[BLUE], n_activated[GREEN]);
+
+      // mobility evaluation (alternative calculation)
+      eval += 5 * (total_moves[RED] + total_moves[YELLOW]
+                   - total_moves[BLUE] - total_moves[GREEN]);
+    }
+
+//    // DEBUG: return early
 //    return maximizing_player ? eval : -eval;
 
     // Mobility evaluation
@@ -558,8 +750,10 @@ int AlphaBetaPlayer::Evaluate(Board& board, bool maximizing_player, int alpha, i
 
       // Piece development
       if (options_.enable_piece_development) {
-        eval -= 50 * (std::get<1>(red_stats) + std::get<1>(yellow_stats)
+        float piece_development = -50.0 * (std::get<1>(red_stats) + std::get<1>(yellow_stats)
           - std::get<1>(blue_stats) - std::get<1>(green_stats));
+//        std::cout << "piece development: " << piece_development << std::endl;
+        eval += (int)piece_development;
       }
 
     }

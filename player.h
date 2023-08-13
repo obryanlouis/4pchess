@@ -48,9 +48,8 @@ struct PlayerOptions {
   bool enable_attacking_king_zone = true;
   bool enable_transposition_table = true;
   bool enable_check_extensions = true;
-  bool enable_piece_development = true;
-  bool enable_lazy_eval = true;
   bool enable_piece_imbalance = true;
+  bool enable_lazy_eval = true;
 
   bool enable_late_move_reduction = true;
   bool enable_late_move_pruning =   true;
@@ -58,6 +57,11 @@ struct PlayerOptions {
 
   // generic test change
   bool test = true;
+
+  bool enable_piece_square_table = false;
+  bool enable_piece_activation = false;
+  // superceded by enable_piece_activation
+  bool enable_piece_development = false;
 
   size_t transposition_table_size = kTranspositionTableSize;
   std::optional<int> max_search_depth;
@@ -216,6 +220,10 @@ class AlphaBetaPlayer {
   int threat_hanging_ = 72;
   int weak_queen_protection_ = 12;
   int king_attacker_values_[6];
+  // color x piece type x row x col
+  int piece_square_table_[4][6][14][14];
+  // number of moves a piece needs to have to be considered active
+  int piece_activation_threshold_[7];
 };
 
 }  // namespace chess

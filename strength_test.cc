@@ -15,7 +15,7 @@ namespace chess {
 constexpr int kNumGames = 100;
 constexpr int kMaxMovesPerGame = 100;
 constexpr int kNumThreads = 12;
-constexpr int kMoveTimeLimitMs = 300;
+constexpr int kMoveTimeLimitMs = 5000;
 
 namespace {
 
@@ -90,8 +90,8 @@ class StrengthTest {
       std::filesystem::create_directory(save_dir_.value());
     }
 
-    player1_options_.test = false;
-    player2_options_.test = false;
+    player1_options_.enable_piece_square_table = false;
+    player2_options_.enable_piece_square_table = true;
   }
 
   void Run() {
@@ -253,6 +253,10 @@ int main(int argc, char* argv[]) {
   std::string save_dir;
   if (argc > 1) {
     save_dir = std::string(argv[1]);
+  } else if (std::filesystem::exists("/tmp")) {
+    save_dir = "/tmp/games";
+  }
+  if (!save_dir.empty()) {
     std::cout << "Will save games to dir: " << save_dir << std::endl;
   }
   chess::RunStrengthTest(save_dir);

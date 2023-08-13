@@ -285,6 +285,26 @@ function maybeRedoMove(jump = 1) {
   }
 }
 
+function performMove(move, piece_type) {
+  if (moves.length > 0 && move_index < moves.length - 1) {
+    moves.splice(move_index + 1);
+  }
+
+  board.makeMove(move);
+  moves.push([move, piece_type]);
+  move_index = moves.length - 1;
+
+  if (move.getEndsGame() == null) {
+    var capture = move.getStandardCapture();
+    if ((capture != null && capture.getPieceType().equals(board_util.KING))
+        || board.getAllLegalMoves().length == 0) {
+      move.setEndsGame(true);
+    } else {
+      move.setEndsGame(false);
+    }
+  }
+}
+
 function maybeMakeSuggestedMove() {
   var board_key = getBoardKey();
   var eval_results = board_key_to_eval[board_key];
@@ -312,11 +332,8 @@ function maybeMakeSuggestedMove() {
       var to_loc = new board_util.BoardLocation(to_row, to_col);
       for (const move of legal_moves) {
         if (move.getTo().equals(to_loc)) {
-
-          board.makeMove(move);
           var piece_type = piece.getPieceType();
-          moves.push([move, piece_type]);
-          move_index = moves.length - 1;
+          performMove(move, piece_type);
           displayBoard();
 
           break;
@@ -334,23 +351,8 @@ $('.cell').click(function() {
   if (legal_moves != null) {
     for (const move of legal_moves) {
       if (move.getTo().equals(loc)) {
-        if (moves.length > 0 && move_index < moves.length - 1) {
-          moves.splice(move_index + 1);
-        }
         var piece_type = board.getPiece(move.getFrom()).getPieceType();
-        board.makeMove(move);
-        moves.push([move, piece_type]);
-        move_index = moves.length - 1;
-
-        if (move.getEndsGame() == null) {
-          var capture = move.getStandardCapture();
-          if ((capture != null && capture.getPieceType().equals(board_util.KING))
-              || board.getAllLegalMoves().length == 0) {
-            move.setEndsGame(true);
-          } else {
-            move.setEndsGame(false);
-          }
-        }
+        performMove(move, piece_type);
 
         break;
       }

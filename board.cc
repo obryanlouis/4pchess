@@ -25,8 +25,8 @@ const BoardLocation kBlueInitialRookLocationKingside(10, 0);
 const BoardLocation kBlueInitialRookLocationQueenside(3, 0);
 const BoardLocation kYellowInitialRookLocationKingside(0, 3);
 const BoardLocation kYellowInitialRookLocationQueenside(0, 10);
-const BoardLocation kGreenInitialRookLocationKingside(13, 3);
-const BoardLocation kGreenInitialRookLocationQueenside(13, 10);
+const BoardLocation kGreenInitialRookLocationKingside(3, 13);
+const BoardLocation kGreenInitialRookLocationQueenside(10, 13);
 
 const Player kRedPlayer = Player(RED);
 const Player kBluePlayer = Player(BLUE);
