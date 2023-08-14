@@ -13,7 +13,7 @@
 namespace chess {
 
 constexpr int kNumGames = 100;
-constexpr int kMaxMovesPerGame = 100;
+constexpr int kMaxMovesPerGame = 200;
 constexpr int kNumThreads = 12;
 constexpr int kMoveTimeLimitMs = 5000;
 
@@ -86,6 +86,17 @@ class StrengthTest {
     }
     if (!save_dir.empty()) {
       save_dir_ = std::filesystem::path(save_dir);
+
+      for (const auto & entry : std::filesystem::directory_iterator(save_dir)) {
+        size_t pos = entry.path().filename().string().rfind(".pgn");
+        if (pos == std::string::npos) {
+          std::cout << "Directory is not empty an contains files "
+                       "that are not *.pgn. Quitting!"
+                    << std::endl;
+          std::abort();
+        }
+      }
+
       std::filesystem::remove_all(save_dir_.value());
       std::filesystem::create_directory(save_dir_.value());
     }

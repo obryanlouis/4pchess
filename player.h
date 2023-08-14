@@ -50,6 +50,7 @@ struct PlayerOptions {
   bool enable_check_extensions = true;
   bool enable_piece_imbalance = true;
   bool enable_lazy_eval = true;
+  bool enable_piece_activation = true;
 
   bool enable_late_move_reduction = true;
   bool enable_late_move_pruning =   true;
@@ -59,9 +60,6 @@ struct PlayerOptions {
   bool test = true;
 
   bool enable_piece_square_table = false;
-  bool enable_piece_activation = false;
-  // superceded by enable_piece_activation
-  bool enable_piece_development = false;
 
   size_t transposition_table_size = kTranspositionTableSize;
   std::optional<int> max_search_depth;
@@ -165,7 +163,7 @@ class AlphaBetaPlayer {
 
   void ResetHistoryHeuristic();
   void UpdateQuietStats(Stack* ss, const Move& move);
-  //int MobilityEvaluation(Board& board, Player turn);
+  void UpdateMobilityEvaluation(Board& board, Player turn);
   bool HasShield(Board& board, PlayerColor color, const BoardLocation& king_loc);
   bool OnBackRank(const BoardLocation& king_loc);
 
@@ -192,7 +190,6 @@ class AlphaBetaPlayer {
   int piece_evaluations_[6];
   int piece_move_order_scores_[6];
   PlayerOptions options_;
-  int player_mobility_scores_[4] = {0, 0, 0, 0};
   int location_evaluations_[14][14];
 
   //HashTableEntry* hash_table_ = nullptr;
@@ -224,6 +221,9 @@ class AlphaBetaPlayer {
   int piece_square_table_[4][6][14][14];
   // number of moves a piece needs to have to be considered active
   int piece_activation_threshold_[7];
+
+  int n_activated_[4] = {0, 0, 0, 0};
+  int total_moves_[4] = {0, 0, 0, 0};
 };
 
 }  // namespace chess

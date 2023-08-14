@@ -118,8 +118,10 @@ class Server:
         at_move = json_response.get('move', {}).get('atMove', 0)
         max_move_ms = 30000
         if at_move is not None:
-          if at_move < 4:
-            max_move_ms = 9000
+          if at_move < 2:
+            max_move_ms = 2000
+          elif at_move < 4:
+            max_move_ms = 5000
 
         clock_ms = float(json_response['clock'])
         assert self._pgn4_info is not None
