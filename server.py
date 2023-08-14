@@ -26,6 +26,9 @@ else:
   _API_KEY_FILENAME = 'api_key_test.txt'
   _SERVER_URL = api.TEST_SERVER_URL
 
+_MAX_MOVE_MS = 30000
+_MIN_REMAINING_MOVE_MS = 30000
+
 
 def _read_api_token(filepath: str) -> str:
   """Read the API token from the given filepath."""
@@ -76,7 +79,11 @@ class Server:
         except:
           print('could not parse json response:', part)
         if json_response is not None:
-          self._handle_stream_json(json_response)
+          gameover = self._handle_stream_json(json_response)
+          if gameover:
+            print('end streaming response after game end...')
+            self._api.chat('Good game')
+            return
 
   def _handle_stream_json(self, json_response):
     if 'pgn4' in json_response:
@@ -85,11 +92,11 @@ class Server:
     info = json_response.get('info')
     if info:
       info = info.lower()
-      if 'Game starting' in info:
-        return
+      if 'game starting' in info:
+        return False
       elif 'no game found' in info:
         print('no game found...')
-        return
+        return False
       elif info == "it's your turn":
         if 'fen4' in json_response:
           fen = json_response['fen4']
@@ -99,7 +106,7 @@ class Server:
         fen = fen.replace('\n', '')
         if 'gameOver' in fen:
           self.clear_arrows()
-          return
+          return True
 
         if fen == '4PCo':
           fen = uci_wrapper.START_FEN_OLD
@@ -115,19 +122,20 @@ class Server:
 
         self._uci.set_position(fen)
 
-        at_move = json_response.get('move', {}).get('atMove', 0)
-        max_move_ms = 30000
-        if at_move is not None:
-          if at_move < 2:
+        # move number of the last player's move, if any
+        last_move_num = json_response.get('move', {}).get('atMove', 0)
+        max_move_ms = _MAX_MOVE_MS
+        if last_move_num is not None:
+          if last_move_num < 1:
             max_move_ms = 2000
-          elif at_move < 4:
+          elif last_move_num < 3:
             max_move_ms = 5000
 
         clock_ms = float(json_response['clock'])
         assert self._pgn4_info is not None
         buffer_ms = 1000
         move_time_ms = self._pgn4_info.incr_time_ms - buffer_ms
-        min_remaining_ms = 30000
+        min_remaining_ms = _MIN_REMAINING_MOVE_MS
         if clock_ms > min_remaining_ms:
           move_time_ms += (clock_ms - min_remaining_ms) / 20
 
@@ -137,16 +145,16 @@ class Server:
         res = self._uci.get_best_move(move_time_ms, self.display_arrows)
         if res.get('gameover'):
           print('game over... (should not get here!)')
-          return
+          return True
         print('send move:', res['best_move'])
         play_response = self._api.play(res['best_move'])
         print('play response:', play_response)
       else:
         print(f'unrecognized info: {info!r}...')
-        return
+        return False
     else:
       print('ignore json response (no info)')
-      return
+      return False
 
   def clear_arrows(self):
     self._api.arrow('clear')

@@ -367,6 +367,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       ;
 
     if (options_.enable_late_move_pruning
+        && alpha > -kMateValue  // don't prune if we're mated
         && quiet
         && !is_tt_pv
         && !is_pv_node
