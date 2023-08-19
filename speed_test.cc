@@ -3,6 +3,7 @@
 #include <vector>
 #include <gtest/gtest.h>
 #include "gmock/gmock.h"
+#include <thread>
 
 #include "board.h"
 #include "player.h"
@@ -10,15 +11,23 @@
 namespace chess {
 namespace {
 
-TEST(Speed, SizeTest) {
-  std::cout << "sizeof(Move): " << sizeof(Move) << std::endl;
-  std::cout << "sizeof(BoardLocation): " << sizeof(BoardLocation) << std::endl;
-  std::cout << "sizeof(Piece*): " << sizeof(Piece*) << std::endl;
-  std::cout << "sizeof(Piece): " << sizeof(Piece) << std::endl;
-  std::cout << "sizeof(std::optional<PieceType>): " << sizeof(std::optional<PieceType>) << std::endl;
-  std::cout << "sizeof(std::optional<SimpleMove>): " << sizeof(std::optional<SimpleMove>) << std::endl;
-  std::cout << "sizeof(std::optional<CastlingRights>): " << sizeof(std::optional<CastlingRights>) << std::endl;
-  std::cout << "sizeof(std::optional<bool>): " << sizeof(std::optional<bool>) << std::endl;
+TEST(Speed, ThreadTest) {
+  auto start = std::chrono::system_clock::now();
+
+  std::vector<std::unique_ptr<std::thread>> threads;
+  for (int i = 0; i < 12*20; i++) {
+    threads.push_back(std::make_unique<std::thread>([i] {
+      int j = 1;
+      j = i + j;
+    }));
+  }
+  for (const auto& thread : threads) {
+    thread->join();
+  }
+
+  auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::system_clock::now() - start);
+  std::cout << "Duration (ms): " << duration.count() << std::endl;
 }
 
 TEST(Speed, BoardTest) {
@@ -26,13 +35,14 @@ TEST(Speed, BoardTest) {
   auto board = Board::CreateStandardSetup();
   PlayerOptions options;
   AlphaBetaPlayer player(options);
+  options.enable_transposition_table = true;
+  options.enable_multithreading = true;
+  options.num_threads = 1;
   player.EnableDebug(true);
 
-  std::cout << "sizeof(Move): " << sizeof(Move) << std::endl;
-  std::cout << "sizeof(Board): " << sizeof(Board) << std::endl;
-
   std::chrono::milliseconds time_limit(10000);
-  auto res = player.MakeMove(*board, time_limit);
+  //auto res = player.MakeMove(*board, time_limit);
+  auto res = player.MakeMove(*board, std::nullopt, 18);
 
   auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
       std::chrono::system_clock::now() - start);

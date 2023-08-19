@@ -65,8 +65,10 @@ class CommandLine {
   bool running_ = true;
   bool debug_ = false;
   EvaluationOptions options_;
-  int hash_table_mb_ = 100;
+  //int hash_table_mb_ = 100;
+  //int n_threads_ = 1;
   bool show_current_line_ = true;
+  PlayerOptions player_options_;
 };
 
 

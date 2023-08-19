@@ -398,11 +398,11 @@ void Player::MakeMove(const v8::FunctionCallbackInfo<v8::Value>& args) {
                v8::Number::New(isolate, evaluation)).Check();
     }
 
-    // for debugging
-    player.ResetMobilityScores(*board);
-    float zero_move_evaluation = player.Evaluate(*board, true) / 100.0f;
-    res->Set(context, String::NewFromUtf8Literal(isolate, "zero_move_evaluation"),
-             v8::Number::New(isolate, zero_move_evaluation)).Check();
+//    // for debugging
+//    player.ResetMobilityScores(*board);
+//    float zero_move_evaluation = player.Evaluate(*board, true) / 100.0f;
+//    res->Set(context, String::NewFromUtf8Literal(isolate, "zero_move_evaluation"),
+//             v8::Number::New(isolate, zero_move_evaluation)).Check();
 
 
     const chess::PVInfo* pv_info = &player.GetPVInfo();

@@ -83,6 +83,7 @@ cc_library(
         ":board",
         ":player",
         ":utils",
+        ":transposition_table",
     ],
 )
 

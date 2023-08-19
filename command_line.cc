@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "player.h"
+#include "transposition_table.h"
 #include "board.h"
 #include "utils.h"
 
@@ -28,6 +29,14 @@ using std::chrono::time_point;
 using std::chrono::duration_cast;
 
 namespace {
+
+std::string LowerCase(const std::string& s) {
+  std::string lower;
+  for (char c : s) {
+    lower += std::tolower(c);
+  }
+  return lower;
+}
 
 std::string GetPVStr(const AlphaBetaPlayer& player) {
   std::string pv;
@@ -86,7 +95,10 @@ void CommandLine::StopEvaluation() {
 
 void CommandLine::ResetPlayer() {
   std::lock_guard lock(mutex_);
-  player_ = std::make_shared<AlphaBetaPlayer>();
+  //PlayerOptions options;
+  //options.enable_multithreading = n_threads_ > 1;
+  //options.num_threads = n_threads_;
+  player_ = std::make_shared<AlphaBetaPlayer>(player_options_);
 }
 
 void CommandLine::ResetBoard() {
@@ -241,9 +253,9 @@ void CommandLine::HandleCommand(
       SendInvalidCommandMessage(line);
       return;
     }
-    const auto& option_name = parts[2];
+    std::string option_name = LowerCase(parts[2]);
     const auto& option_value = parts[4];
-    if (option_name == "Hash") {
+    if (option_name == "hash") {
       auto val = ParseInt(option_value);
       if (val.has_value()) {
         if (val.value() < 0) {
@@ -251,12 +263,13 @@ void CommandLine::HandleCommand(
               "Hash MB must be non-negative, given: " + option_value);
           return;
         }
-        hash_table_mb_ = val.value();
+        //hash_table_mb_ = val.value();
+        player_options_.transposition_table_size = val.value() * 1000000 / sizeof(HashTableEntry);
       } else {
         SendInvalidCommandMessage("Can not parse int: " + option_value);
         return;
       }
-    } else if (option_name == "UCI_ShowCurrLine") {
+    } else if (option_name == "uci_showcurrline") {
       if (option_value == "true") {
         show_current_line_ = true;
       } else if (option_value == "false") {
@@ -267,6 +280,20 @@ void CommandLine::HandleCommand(
               "'false', given: " + option_value);
         return;
       }
+    } else if (option_name == "threads") {
+      int n_threads = 1;
+      try {
+        n_threads = std::stoi(option_value);
+      } catch (const std::exception& e) {
+        SendInvalidCommandMessage(
+            "Invalid value for threads: " + option_value);
+        return;
+      }
+      if (n_threads < 0) {
+        SendInvalidCommandMessage("Num threads must be positive");
+      }
+      player_options_.num_threads = n_threads;
+      player_options_.enable_multithreading = n_threads > 1;
     }
 
   } else if (command == "register") {
