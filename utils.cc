@@ -316,7 +316,9 @@ namespace {
 
 std::optional<std::tuple<size_t, BoardLocation>> ParseLocation(
     const std::string& move_str, size_t start) {
-  if (start < move_str.size() && move_str[start] == '-') {
+  // Skip '-' and 'x'
+  if (start < move_str.size() && (move_str[start] == '-'
+                                  || move_str[start] == 'x')) {
     start++;
   }
   if (move_str.size() < start + 2) {
@@ -340,12 +342,6 @@ std::optional<std::tuple<size_t, BoardLocation>> ParseLocation(
   }
   start++;
 
-  // Skip '-' and 'x'
-  if (start < move_str.size()
-      && (move_str[start] == '-' || move_str[start] == 'x')) {
-    start++;
-  }
-
   if (start < move_str.size() && std::isdigit(move_str[start])) {
     int digit = move_str[start] - '0';
     row = 10 * row + digit;
@@ -354,6 +350,39 @@ std::optional<std::tuple<size_t, BoardLocation>> ParseLocation(
   // transform 1-14 upwards to 0-13 downwards
   row = 14 - row;
   return std::make_tuple(start, BoardLocation(row, col));
+}
+
+std::optional<std::tuple<size_t, PieceType>> ParsePromotion(
+    const std::string& move_str, size_t start) {
+  if (start >= move_str.size()) {
+    return std::make_tuple(start, NO_PIECE);
+  }
+  if (start < move_str.size() && move_str[start] == '=') {
+    start++;
+  }
+  if (start >= move_str.size()) {
+    return std::nullopt;
+  }
+  char c = move_str[start];
+  switch (c) {
+  case 'N':
+  case 'n':
+    return std::make_tuple(start + 1, KNIGHT);
+  case 'B':
+  case 'b':
+    return std::make_tuple(start + 1, BISHOP);
+  case 'R':
+  case 'r':
+    return std::make_tuple(start + 1, ROOK);
+  case 'Q':
+  case 'q':
+    return std::make_tuple(start + 1, QUEEN);
+  default:
+    break;
+  }
+
+  // unrecognized piece type
+  return std::nullopt;
 }
 
 }  // namespace
@@ -368,16 +397,22 @@ std::optional<Move> ParseMove(Board& board, const std::string& move_str) {
   if (!to.has_value()) {
     return std::nullopt;
   }
+  auto promotion = ParsePromotion(move_str, std::get<0>(to.value()));
+  if (!promotion.has_value()) {
+    return std::nullopt;
+  }
 
   BoardLocation from_loc = std::get<1>(from.value());
   BoardLocation to_loc = std::get<1>(to.value());
+  PieceType promotion_piece_type = std::get<1>(promotion.value());
 
   Move moves[300];
   size_t num_moves = board.GetPseudoLegalMoves2(moves, 300);
 
   for (size_t i = 0; i < num_moves; i++) {
     const auto& move = moves[i];
-    if (move.From() == from_loc && move.To() == to_loc) {
+    if (move.From() == from_loc && move.To() == to_loc
+        && move.GetPromotionPieceType() == promotion_piece_type) {
       return move;
     }
   }

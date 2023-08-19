@@ -4,6 +4,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "utils.h"
 #include "board.h"
 #include "player.h"
 
@@ -43,16 +44,10 @@ TEST(PlayerTest, EvaluateCheckmateNextMove) {
   PlayerOptions options;
   AlphaBetaPlayer player(options);
 
-  std::unordered_map<BoardLocation, Piece> location_to_piece = {
-    {BoardLocation(13, 8), Piece(kRedPlayer, KING)},
-    {BoardLocation(0, 3), Piece(kBluePlayer, KING)},
-    {BoardLocation(0, 5), Piece(kYellowPlayer, KING)},
-    {BoardLocation(6, 13), Piece(kGreenPlayer, KING)},
-    {BoardLocation(1, 10), Piece(kRedPlayer, QUEEN)},
-  };
-  Board board(kRedPlayer, location_to_piece);
+  auto board = ParseBoardFromFEN("R-0,0,0,0-1,1,1,1-1,1,1,1-0,0,0,0-0-x,x,x,bK,7,x,x,x/x,x,x,7,rQ,x,x,x/x,x,x,2,yK,5,x,x,x/14/14/14/13,gK/14/14/14/14/x,x,x,8,x,x,x/x,x,x,8,x,x,x/x,x,x,4,rK,3,x,x,x");
+  ASSERT_NE(board, nullptr);
 
-  const auto& res = player.MakeMove(board, std::nullopt, 2);
+  const auto& res = player.MakeMove(*board, std::nullopt, 2);
   ASSERT_TRUE(res.has_value());
   float valuation = std::get<0>(res.value());
   const auto& move_or = std::get<1>(res.value());

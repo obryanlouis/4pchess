@@ -89,7 +89,76 @@ TEST(UtilsTest, ParseMoveTest) {
 
   move_or = ParseMove(*board, "g13-g12");
   EXPECT_EQ(move_or, Move(BoardLocation(1, 6), BoardLocation(2, 6)));
+}
 
+// test parsing promotions
+TEST(UtilsTest, ParsePromotionTest) {
+  std::shared_ptr<Board> board;
+  std::optional<Move> move_or;
+
+  // quiet move
+  board = ParseBoardFromFEN("R-0,0,0,0-1,1,1,1-1,1,1,1-0,0,0,0-0-{'enPassant':('','','','')}-x,x,x,yR,yN,yB,yK,yQ,yB,yN,yR,x,x,x/x,x,x,yP,yP,yP,yP,yP,yP,yP,yP,x,x,x/x,x,x,8,x,x,x/bR,bP,4,bN,1,gN,3,gP,gR/1,bP,5,rP,4,gP,1/bB,bP,10,gP,gB/bQ,bP,10,gP,gK/bK,bP,10,gP,gQ/bB,bP,10,gP,gB/bN,bP,10,gP,gN/bR,bP,10,gP,gR/x,x,x,8,x,x,x/x,x,x,rP,rP,rP,rP,1,rP,rP,rP,x,x,x/x,x,x,rR,rN,rB,rQ,rK,rB,rN,rR,x,x,x");
+  ASSERT_NE(board, nullptr);
+  EXPECT_EQ(board->GetTurn().GetColor(), RED);
+
+  // all piece types
+  move_or = ParseMove(*board, "h10h11q");
+  EXPECT_EQ(move_or, Move(BoardLocation(4, 7), BoardLocation(3, 7),
+                          Piece::kNoPiece, BoardLocation::kNoLocation,
+                          Piece::kNoPiece, QUEEN));
+
+  move_or = ParseMove(*board, "h10h11r");
+  EXPECT_EQ(move_or, Move(BoardLocation(4, 7), BoardLocation(3, 7),
+                          Piece::kNoPiece, BoardLocation::kNoLocation,
+                          Piece::kNoPiece, ROOK));
+
+  move_or = ParseMove(*board, "h10h11b");
+  EXPECT_EQ(move_or, Move(BoardLocation(4, 7), BoardLocation(3, 7),
+                          Piece::kNoPiece, BoardLocation::kNoLocation,
+                          Piece::kNoPiece, BISHOP));
+
+  move_or = ParseMove(*board, "h10h11n");
+  EXPECT_EQ(move_or, Move(BoardLocation(4, 7), BoardLocation(3, 7),
+                          Piece::kNoPiece, BoardLocation::kNoLocation,
+                          Piece::kNoPiece, KNIGHT));
+
+  // upper/lower cases both accepted
+  move_or = ParseMove(*board, "h10h11Q");
+  EXPECT_EQ(move_or, Move(BoardLocation(4, 7), BoardLocation(3, 7),
+                          Piece::kNoPiece, BoardLocation::kNoLocation,
+                          Piece::kNoPiece, QUEEN));
+
+  move_or = ParseMove(*board, "h10h11R");
+  EXPECT_EQ(move_or, Move(BoardLocation(4, 7), BoardLocation(3, 7),
+                          Piece::kNoPiece, BoardLocation::kNoLocation,
+                          Piece::kNoPiece, ROOK));
+
+  move_or = ParseMove(*board, "h10h11B");
+  EXPECT_EQ(move_or, Move(BoardLocation(4, 7), BoardLocation(3, 7),
+                          Piece::kNoPiece, BoardLocation::kNoLocation,
+                          Piece::kNoPiece, BISHOP));
+
+  move_or = ParseMove(*board, "h10h11N");
+  EXPECT_EQ(move_or, Move(BoardLocation(4, 7), BoardLocation(3, 7),
+                          Piece::kNoPiece, BoardLocation::kNoLocation,
+                          Piece::kNoPiece, KNIGHT));
+
+  // with '='
+  move_or = ParseMove(*board, "h10h11=q");
+  EXPECT_EQ(move_or, Move(BoardLocation(4, 7), BoardLocation(3, 7),
+                          Piece::kNoPiece, BoardLocation::kNoLocation,
+                          Piece::kNoPiece, QUEEN));
+
+  // capture
+  move_or = ParseMove(*board, "h10xg11=q");
+  EXPECT_EQ(move_or, Move(BoardLocation(4, 7), BoardLocation(3, 6),
+                          board->GetPiece(3, 6), BoardLocation::kNoLocation,
+                          Piece::kNoPiece, QUEEN));
+
+  move_or = ParseMove(*board, "h10xi11=r");
+  EXPECT_EQ(move_or, Move(BoardLocation(4, 7), BoardLocation(3, 8),
+                          board->GetPiece(3, 8), BoardLocation::kNoLocation,
+                          Piece::kNoPiece, ROOK));
 }
 
 
