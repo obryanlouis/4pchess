@@ -441,7 +441,7 @@ void Board::GetKingMoves2(
             from.Relative(0, 2),
             from.Relative(0, 3),
           };
-          rook_location = from.Relative(0, -4);
+          rook_location = from.Relative(0, 4);
         }
         break;
       case GREEN:

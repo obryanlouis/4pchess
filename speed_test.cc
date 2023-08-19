@@ -6,11 +6,13 @@
 
 #include "board.h"
 #include "player.h"
+#include "transposition_table.h"
 
 namespace chess {
 namespace {
 
 TEST(Speed, SizeTest) {
+  std::cout << "sizeof(HashTableEntry): " << sizeof(HashTableEntry) << std::endl;
   std::cout << "sizeof(Move): " << sizeof(Move) << std::endl;
   std::cout << "sizeof(BoardLocation): " << sizeof(BoardLocation) << std::endl;
   std::cout << "sizeof(Piece*): " << sizeof(Piece*) << std::endl;

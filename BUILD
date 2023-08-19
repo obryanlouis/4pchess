@@ -44,6 +44,7 @@ cc_test(
     deps = [
         ":board",
         ":player",
+        ":transposition_table",
         "@com_google_googletest//:gtest_main",
     ],
 )
