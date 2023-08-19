@@ -438,9 +438,9 @@ void Board::GetKingMoves2(
           rook_location = from.Relative(0, -3);
         } else {
           squares_between = {
-            from.Relative(0, -1),
-            from.Relative(0, -2),
-            from.Relative(0, -3),
+            from.Relative(0, 1),
+            from.Relative(0, 2),
+            from.Relative(0, 3),
           };
           rook_location = from.Relative(0, -4);
         }

@@ -162,10 +162,13 @@ AlphaBetaPlayer::AlphaBetaPlayer(std::optional<PlayerOptions> options) {
     piece_activation_threshold_[KNIGHT] = 3;
     piece_activation_threshold_[ROOK] = 5;
   }
+
+  counter_moves_ = new Move[14*14*14*14];
 }
 
 AlphaBetaPlayer::~AlphaBetaPlayer() {
   delete[] move_buffer_;
+  delete[] counter_moves_;
 }
 
 Move* AlphaBetaPlayer::GetNextMoveBufferPartition() {
@@ -329,7 +332,8 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
     piece_move_order_scores_,
     options_.enable_move_order_checks,
     moves,
-    buffer_partition_size_);
+    buffer_partition_size_,
+    counter_moves_);
 
   bool has_legal_moves = false;
   int move_count = 0;
@@ -494,6 +498,12 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
         if (options_.enable_history_heuristic) {
           history_heuristic_[from.GetRow()][from.GetCol()]
             [to.GetRow()][to.GetCol()] += (1 << depth);
+        }
+        if (options_.enable_counter_move_heuristic) {
+//          counter_moves_[from.GetRow()][from.GetCol()]
+//            [to.GetRow()][to.GetCol()] = move;
+          counter_moves_[from.GetRow()*14*14*14 + from.GetCol()*14*14
+            + to.GetRow()*14 + to.GetCol()] = move;
         }
       }
 

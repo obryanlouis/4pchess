@@ -20,11 +20,11 @@ class MovePicker {
     int piece_move_order_scores[6],
     bool enable_move_order_checks,
     Move* buffer,
-    size_t buffer_size);
+    size_t buffer_size,
+    Move* counter_moves);
 
   // If this returns nullptr then there are no more moves
   Move* GetNextMove();
-  //int GetNumMoves() const { return moves_.size(); };
   int GetNumMoves() const { return num_moves_; };
 
  private:
@@ -36,7 +36,6 @@ class MovePicker {
   };
 
   Board* board_ = nullptr;
-  //std::vector<Move> moves_;
   Move* moves_ = nullptr;
   size_t num_moves_ = 0;
   uint8_t stage_ = 0;

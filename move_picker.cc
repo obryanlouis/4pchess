@@ -22,16 +22,14 @@ MovePicker::MovePicker(
     int piece_move_order_scores[6],
     bool enable_move_order_checks,
     Move* buffer,
-    size_t buffer_size) {
+    size_t buffer_size,
+    Move* counter_moves) {
   enable_move_order_checks_ = enable_move_order_checks;
   stages_.resize(5);
-  //moves_ = board.GetPseudoLegalMoves();
   moves_ = buffer;
   num_moves_ = board.GetPseudoLegalMoves2(buffer, buffer_size);
   board_ = &board;
 
-//  for (unsigned short i = 0; i < moves_.size(); i++) {
-//    const auto& move = moves_[i];
   for (size_t i = 0; i < num_moves_; i++) {
     const auto& move = moves_[i];
 
@@ -58,6 +56,11 @@ MovePicker::MovePicker(
       const auto& from = move.From();
       const auto& to = move.To();
       score += history_heuristic[from.GetRow()][from.GetCol()][to.GetRow()][to.GetCol()];
+      if (move == counter_moves[from.GetRow()*14*14*14 + from.GetCol()*14*14
+          + to.GetRow()*14 + to.GetCol()]) {
+        score += 50;
+      }
+
       stages_[QUIET].emplace_back(i, score);
     }
   }

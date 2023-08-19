@@ -143,34 +143,6 @@ class Piece {
 //extern const Piece* kPieceSet[4][6];
 
 
-//class BoardLocation {
-// public:
-//  BoardLocation() = default;
-//
-//  BoardLocation(int8_t row, int8_t col) : row_(row), col_(col) { }
-//
-//  int8_t GetRow() const { return row_; }
-//  int8_t GetCol() const { return col_; }
-//  bool operator==(const BoardLocation& other) const {
-//    return row_ == other.row_ && col_ == other.col_;
-//  }
-//  bool operator!=(const BoardLocation& other) const {
-//    return !(*this == other);
-//  }
-//
-//  BoardLocation Relative(int8_t delta_rows, int8_t delta_cols) const {
-//    return BoardLocation(row_ + delta_rows, col_ + delta_cols);
-//  }
-//  friend std::ostream& operator<<(
-//      std::ostream& os, const BoardLocation& location);
-//
-//  std::string PrettyStr() const;
-//
-// private:
-//  int8_t row_ = 0;
-//  int8_t col_ = 0;
-//};
-
 class BoardLocation {
  public:
   BoardLocation() : loc_(196) {}
@@ -468,7 +440,7 @@ class Board {
         castling_rights = std::nullopt,
       std::optional<EnpassantInitialization> enp = std::nullopt);
 
-  Board(Board&) = default;
+  Board(const Board&) = default;
 
   size_t GetPseudoLegalMoves2(Move* buffer, size_t limit);
 
