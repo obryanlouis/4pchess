@@ -53,6 +53,7 @@ struct PlayerOptions {
   bool enable_piece_imbalance = true;
   bool enable_lazy_eval = true;
   bool enable_piece_activation = true;
+  bool enable_counter_move_heuristic = true;
 
   bool enable_late_move_reduction = true;
   bool enable_late_move_pruning =   true;
@@ -103,6 +104,9 @@ class ThreadState {
   // https://www.chessprogramming.org/History_Heuristic
   // (from_row, from_col, to_row, to_col)
   int history_heuristic[14][14][14][14];
+  // https://www.chessprogramming.org/Countermove_Heuristic
+  // (from_row, from_col, to_row, to_col)
+  Move* counter_moves = nullptr;
 
  private:
   PlayerOptions options_;
@@ -214,9 +218,6 @@ class AlphaBetaPlayer {
 
   bool enable_debug_ = false;
 
-  // https://www.chessprogramming.org/History_Heuristic
-  // (from_row, from_col, to_row, to_col)
-  //int history_heuristic_[14][14][14][14];
   int reductions_[kMaxPly];
 
   // For evaluation

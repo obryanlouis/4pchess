@@ -101,8 +101,8 @@ class StrengthTest {
       std::filesystem::create_directory(save_dir_.value());
     }
 
-    player1_options_.enable_piece_square_table = false;
-    player2_options_.enable_piece_square_table = true;
+    player1_options_.enable_counter_move_heuristic = false;
+    player2_options_.enable_counter_move_heuristic = true;
   }
 
   void Run() {

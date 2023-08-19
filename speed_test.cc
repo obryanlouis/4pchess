@@ -7,6 +7,7 @@
 
 #include "board.h"
 #include "player.h"
+#include "transposition_table.h"
 
 namespace chess {
 namespace {

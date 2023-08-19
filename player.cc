@@ -176,16 +176,19 @@ AlphaBetaPlayer::AlphaBetaPlayer(std::optional<PlayerOptions> options) {
     piece_activation_threshold_[KNIGHT] = 3;
     piece_activation_threshold_[ROOK] = 5;
   }
+
 }
 
 ThreadState::ThreadState(
     PlayerOptions options, const Board& board, const PVInfo& pv_info)
   : options_(options), board_(board), pv_info_(pv_info) {
   move_buffer_ = new Move[kBufferPartitionSize * kBufferNumPartitions];
+  counter_moves = new Move[14*14*14*14];
 }
 
 ThreadState::~ThreadState() {
   delete[] move_buffer_;
+  delete[] counter_moves;
 }
 
 Move* ThreadState::GetNextMoveBufferPartition() {
@@ -356,7 +359,8 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
     piece_move_order_scores_,
     options_.enable_move_order_checks,
     moves,
-    kBufferPartitionSize);
+    kBufferPartitionSize,
+    thread_state.counter_moves);
 
   bool has_legal_moves = false;
   int move_count = 0;
@@ -564,6 +568,10 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
         if (options_.enable_history_heuristic) {
           thread_state.history_heuristic[from.GetRow()][from.GetCol()]
             [to.GetRow()][to.GetCol()] += (1 << depth);
+        }
+        if (options_.enable_counter_move_heuristic) {
+          thread_state.counter_moves[from.GetRow()*14*14*14 + from.GetCol()*14*14
+            + to.GetRow()*14 + to.GetCol()] = move;
         }
       }
 

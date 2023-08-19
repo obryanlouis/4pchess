@@ -12,7 +12,8 @@ parser = argparse.ArgumentParser(
     description='Interacts with chess.com')
 def parse_bool(x):
   return x.lower() in ['true', 't', '1']
-parser.add_argument('-prod', '--prod', type=parse_bool, required=False)
+parser.add_argument('-prod', '--prod', type=parse_bool, required=False,
+    default=True)
 args = parser.parse_args()
 
 

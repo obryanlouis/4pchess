@@ -12,6 +12,25 @@ namespace chess {
 using Loc = BoardLocation;
 using ::testing::UnorderedElementsAre;
 
+namespace {
+
+std::vector<Move> GetMoves(Board& board, PieceType piece_type) {
+  std::vector<Move> moves;
+
+  Move move_buffer[300];
+  size_t num_moves = board.GetPseudoLegalMoves2(move_buffer, 300);
+  for (size_t i = 0; i < num_moves && i < 300; i++) {
+    const auto& move = move_buffer[i];
+    const auto& piece = board.GetPiece(move.From());
+    if (piece.GetPieceType() == piece_type) {
+      moves.push_back(move);
+    }
+  }
+  return moves;
+}
+
+}  // namespace
+
 TEST(BoardLocationTest, Properties) {
   BoardLocation x(0, 0);
   BoardLocation y(1, 2);
@@ -597,7 +616,98 @@ TEST(PlayerTest, Properties) {
 //        Move(BoardLocation(7, 7), BoardLocation(11, 3), Piece(kRedPlayer, QUEEN))));
 //
 //}
-//
+
+TEST(BoardTest, GetLegalMoves_King) {
+  std::shared_ptr<Board> board;
+  std::vector<Move> moves;
+
+  // normal move -- all directions
+  board = ParseBoardFromFEN("R-0,0,0,0-1,1,1,1-1,1,1,1-0,0,0,0-0-x,x,x,yR,yN,yB,yK,yQ,yB,yN,yR,x,x,x/x,x,x,yP,yP,yP,yP,yP,yP,yP,yP,x,x,x/x,x,x,8,x,x,x/bR,bP,10,gP,gR/bN,bP,10,gP,gN/bB,bP,10,gP,gB/bQ,bP,10,gP,gK/bK,bP,10,gP,gQ/bB,bP,10,gP,gB/bN,bP,5,rK,4,gP,gN/bR,bP,10,gP,gR/x,x,x,8,x,x,x/x,x,x,rP,rP,rP,rP,rP,rP,rP,rP,x,x,x/x,x,x,rR,rN,rB,rQ,1,rB,rN,rR,x,x,x");
+  ASSERT_NE(board, nullptr);
+
+  moves = GetMoves(*board, KING);
+  EXPECT_THAT(
+      moves,
+      UnorderedElementsAre(
+        ParseMove(*board, "h5-i4"),
+        ParseMove(*board, "h5-i5"),
+        ParseMove(*board, "h5-i6"),
+        ParseMove(*board, "h5-h4"),
+        ParseMove(*board, "h5-h6"),
+        ParseMove(*board, "h5-g4"),
+        ParseMove(*board, "h5-g5"),
+        ParseMove(*board, "h5-g6")));
+
+  // can't move into check
+
+  // castling: kingside & queenside
+  board = ParseBoardFromFEN("R-0,0,0,0-1,1,1,1-1,1,1,1-0,0,0,0-0-x,x,x,yR,2,yK,3,yR,x,x,x/x,x,x,yP,yP,yP,yP,yP,yP,yP,yP,x,x,x/x,x,x,8,x,x,x/bR,bP,10,gP,gR/1,bP,10,gP,1/1,bP,10,gP,1/1,bP,10,gP,gK/bK,bP,10,gP,1/1,bP,10,gP,1/1,bP,10,gP,1/bR,bP,10,gP,gR/x,x,x,8,x,x,x/x,x,x,rP,rP,rP,rP,rP,rP,rP,rP,x,x,x/x,x,x,rR,3,rK,2,rR,x,x,x");
+  moves = GetMoves(*board, KING);
+  EXPECT_THAT(
+      moves,
+      UnorderedElementsAre(
+        ParseMove(*board, "h1-i1"),
+        ParseMove(*board, "h1-j1"),
+        ParseMove(*board, "h1-g1"),
+        ParseMove(*board, "h1-f1")));
+
+  // castling: all colors
+  board = ParseBoardFromFEN("B-0,0,0,0-1,1,1,1-1,1,1,1-0,0,0,0-0-x,x,x,yR,2,yK,3,yR,x,x,x/x,x,x,yP,yP,yP,yP,yP,yP,yP,yP,x,x,x/x,x,x,8,x,x,x/bR,bP,10,gP,gR/1,bP,10,gP,1/1,bP,10,gP,1/1,bP,10,gP,gK/bK,bP,10,gP,1/1,bP,10,gP,1/1,bP,10,gP,1/bR,bP,10,gP,gR/x,x,x,8,x,x,x/x,x,x,rP,rP,rP,rP,rP,rP,rP,rP,x,x,x/x,x,x,rR,3,rK,2,rR,x,x,x");
+  moves = GetMoves(*board, KING);
+  EXPECT_THAT(
+      moves,
+      UnorderedElementsAre(
+        ParseMove(*board, "a7-a5"),
+        ParseMove(*board, "a7-a6"),
+        ParseMove(*board, "a7-a8"),
+        ParseMove(*board, "a7-a9")));
+
+  board = ParseBoardFromFEN("Y-0,0,0,0-1,1,1,1-1,1,1,1-0,0,0,0-0-x,x,x,yR,2,yK,3,yR,x,x,x/x,x,x,yP,yP,yP,yP,yP,yP,yP,yP,x,x,x/x,x,x,8,x,x,x/bR,bP,10,gP,gR/1,bP,10,gP,1/1,bP,10,gP,1/1,bP,10,gP,gK/bK,bP,10,gP,1/1,bP,10,gP,1/1,bP,10,gP,1/bR,bP,10,gP,gR/x,x,x,8,x,x,x/x,x,x,rP,rP,rP,rP,rP,rP,rP,rP,x,x,x/x,x,x,rR,3,rK,2,rR,x,x,x");
+  moves = GetMoves(*board, KING);
+  EXPECT_THAT(
+      moves,
+      UnorderedElementsAre(
+        ParseMove(*board, "g14-e14"),
+        ParseMove(*board, "g14-f14"),
+        ParseMove(*board, "g14-h14"),
+        ParseMove(*board, "g14-i14")));
+
+  board = ParseBoardFromFEN("G-0,0,0,0-1,1,1,1-1,1,1,1-0,0,0,0-0-x,x,x,yR,2,yK,3,yR,x,x,x/x,x,x,yP,yP,yP,yP,yP,yP,yP,yP,x,x,x/x,x,x,8,x,x,x/bR,bP,10,gP,gR/1,bP,10,gP,1/1,bP,10,gP,1/1,bP,10,gP,gK/bK,bP,10,gP,1/1,bP,10,gP,1/1,bP,10,gP,1/bR,bP,10,gP,gR/x,x,x,8,x,x,x/x,x,x,rP,rP,rP,rP,rP,rP,rP,rP,x,x,x/x,x,x,rR,3,rK,2,rR,x,x,x");
+  moves = GetMoves(*board, KING);
+  EXPECT_THAT(
+      moves,
+      UnorderedElementsAre(
+        ParseMove(*board, "n8-n6"),
+        ParseMove(*board, "n8-n7"),
+        ParseMove(*board, "n8-n9"),
+        ParseMove(*board, "n8-n10")));
+
+  // castling through check not allowed
+  board = ParseBoardFromFEN("R-0,0,0,0-1,1,1,1-1,1,1,1-0,0,0,0-0-x,x,x,yR,2,yK,3,yR,x,x,x/x,x,x,yP,yP,yP,yP,yP,yP,yP,yP,x,x,x/x,x,x,8,x,x,x/bR,bP,10,gP,gR/1,bP,10,gP,1/1,bP,10,gP,1/1,bP,4,bR,5,gP,gK/bK,bP,10,gP,1/1,bP,10,gP,1/1,bP,10,gP,1/bR,bP,10,gP,gR/x,x,x,8,x,x,x/x,x,x,rP,rP,rP,1,rP,rP,rP,rP,x,x,x/x,x,x,rR,3,rK,2,rR,x,x,x");
+  moves = GetMoves(*board, KING);
+  EXPECT_THAT(
+      moves,
+      UnorderedElementsAre(
+        ParseMove(*board, "h1-i1"),
+        ParseMove(*board, "h1-j1"),
+        // pseudo legal moves into check
+        ParseMove(*board, "h1-g1"),
+        ParseMove(*board, "h1-g2")));
+
+  // castling not allowed while in check
+
+  board = ParseBoardFromFEN("R-0,0,0,0-1,1,1,1-1,1,1,1-0,0,0,0-0-x,x,x,yR,2,yK,3,yR,x,x,x/x,x,x,yP,yP,yP,yP,yP,yP,yP,yP,x,x,x/x,x,x,8,x,x,x/bR,bP,10,gP,gR/1,bP,10,gP,1/1,bP,10,gP,1/1,bP,4,bR,5,gP,gK/bK,bP,10,gP,1/1,bP,10,gP,1/1,bP,1,bB,8,gP,1/bR,bP,10,gP,gR/x,x,x,8,x,x,x/x,x,x,rP,rP,rP,1,rP,rP,rP,rP,x,x,x/x,x,x,rR,3,rK,2,rR,x,x,x");
+  moves = GetMoves(*board, KING);
+  EXPECT_THAT(
+      moves,
+      UnorderedElementsAre(
+        ParseMove(*board, "h1-i1"),
+        // pseudo legal moves into check
+        ParseMove(*board, "h1-g1"),
+        ParseMove(*board, "h1-g2")));
+
+}
+
 //TEST(BoardTest, GetLegalMoves_King) {
 //  // Move (allowed, outside board bounds)
 //  // Capture (same/other team, location of piece, location in bounds)
@@ -807,7 +917,7 @@ TEST(PlayerTest, Properties) {
 //                      Piece(kRedPlayer, ROOK)))));
 //
 //}
-//
+
 //TEST(BoardTest, GetLegalMoves_InCheck) {
 //  // Moving a piece discovers check
 //  // King moves into check

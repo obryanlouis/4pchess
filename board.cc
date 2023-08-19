@@ -225,7 +225,6 @@ void Board::GetPawnMoves2(
       }
     }
   }
-
 }
 
 void Board::GetKnightMoves2(
@@ -1555,7 +1554,11 @@ std::string BoardLocation::PrettyStr() const {
 }
 
 std::string Move::PrettyStr() const {
-  return from_.PrettyStr() + "-" + to_.PrettyStr();
+  std::string s = from_.PrettyStr() + "-" + to_.PrettyStr();
+  if (promotion_piece_type_ != NO_PIECE) {
+    s += "=" + ToStr(promotion_piece_type_);
+  }
+  return s;
 }
 
 bool Board::DeliversCheck(const Move& move) {
