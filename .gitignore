@@ -3,9 +3,7 @@
 **/dist/
 
 # Tmp files
-**/*swp
-**/*swo
-**/*swn
+**/*.sw*
 
 # Bazel auto-generated files
 bazel*

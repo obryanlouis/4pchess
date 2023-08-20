@@ -14,6 +14,10 @@ def parse_bool(x):
   return x.lower() in ['true', 't', '1']
 parser.add_argument('-prod', '--prod', type=parse_bool, required=False,
     default=True)
+# might need to set this to another value depending on your computer.
+# recommended: max(1, #physical processors - 2)
+parser.add_argument('-num_threads', '--num_threads', type=int, required=False,
+    default=10)
 args = parser.parse_args()
 
 

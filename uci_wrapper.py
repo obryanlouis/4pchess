@@ -18,8 +18,9 @@ START_FEN_BY = "R-0,0,0,0-1,1,1,1-1,1,1,1-0,0,0,0-0-x,x,x,yR,yN,yB,yQ,yK,yB,yN,y
 
 class UciWrapper:
 
-  def __init__(self):
+  def __init__(self, num_threads):
     self._process = self.create_process()
+    self._num_threads = num_threads
 
   def create_process(self):
     return subprocess.Popen(
@@ -40,6 +41,9 @@ class UciWrapper:
 
   def set_position(self, fen: str, moves: list[str] | None = None):
     self.maybe_recreate_process()
+
+    self._process.stdin.write(
+        f'setoption name threads value {self._num_threads}\n')
 
     fen = fen.replace('\n', '')
     parts = [f'position fen {fen}']

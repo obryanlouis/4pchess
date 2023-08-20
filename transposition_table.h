@@ -20,7 +20,6 @@ struct HashTableEntry {
   int score;
   ScoreBound bound;
   bool is_pv;
-  std::atomic<int> searching = 0;
 };
 
 class TranspositionTable {
@@ -28,8 +27,6 @@ class TranspositionTable {
    TranspositionTable(size_t table_size);
 
    const HashTableEntry* Get(int64_t key);
-   // increments 'searching' value and returns the prior value
-   int IncrSearching(int64_t key, int value);
    void Save(int64_t key, int depth, std::optional<Move> move,
              int score, ScoreBound bound, bool is_pv);
 

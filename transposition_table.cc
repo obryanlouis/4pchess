@@ -24,14 +24,6 @@ const HashTableEntry* TranspositionTable::Get(int64_t key) {
   return nullptr;
 }
 
-int TranspositionTable::IncrSearching(int64_t key, int value) {
-  size_t n = key % table_size_;
-  HashTableEntry* entry = hash_table_ + n;
-  int curr = entry->searching;
-  entry->searching += value;
-  return curr;
-}
-
 void TranspositionTable::Save(
     int64_t key, int depth, std::optional<Move> move, int score,
     ScoreBound bound, bool is_pv) {

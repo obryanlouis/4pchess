@@ -60,7 +60,7 @@ struct PlayerOptions {
   bool enable_null_move_pruning =   true;
 
   bool enable_multithreading = true;
-  int num_threads = 12;
+  int num_threads = 1;
 
   // generic test change
   bool test = false;
@@ -128,6 +128,8 @@ class AlphaBetaPlayer {
  public:
   AlphaBetaPlayer(
       std::optional<PlayerOptions> options = std::nullopt);
+  ~AlphaBetaPlayer();
+
   std::optional<std::tuple<int, std::optional<Move>, int>> MakeMove(
       Board& board,
       std::optional<std::chrono::milliseconds> time_limit = std::nullopt,
@@ -137,7 +139,6 @@ class AlphaBetaPlayer {
   void CancelEvaluation() { canceled_ = true; }
   // NOTE: Should wait until evaluation is done before resetting this to true.
   void SetCanceled(bool canceled) { canceled_ = canceled; }
-  //bool IsCanceled() { return canceled_.load(); }
   bool IsCanceled() { return canceled_; }
   const PVInfo& GetPVInfo() const { return pv_info_; }
 
@@ -177,6 +178,9 @@ class AlphaBetaPlayer {
   void EnableDebug(bool enable) { enable_debug_ = enable; }
   int Reduction(int depth, int move_number) const;
 
+  // hash buffer size per ply for searching_ variable
+  static constexpr int kSearchHashBufferSize = 1000;
+
  private:
 
   std::optional<std::tuple<int, std::optional<Move>, int>>
@@ -192,7 +196,6 @@ class AlphaBetaPlayer {
   bool OnBackRank(const BoardLocation& king_loc);
 
   int64_t num_nodes_ = 0; // debugging
-  int64_t num_quiescence_nodes_ = 0;
   int64_t num_cache_hits_ = 0;
   int64_t num_null_moves_tried_ = 0;
   int64_t num_null_moves_pruned_ = 0;
@@ -228,7 +231,7 @@ class AlphaBetaPlayer {
   // number of moves a piece needs to have to be considered active
   int piece_activation_threshold_[7];
 
-  int searching_[kMaxPly][1000];
+  bool* searching_ = nullptr;
 };
 
 }  // namespace chess

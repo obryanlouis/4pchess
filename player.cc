@@ -26,7 +26,7 @@ int MoveHash(const Move& move) {
   hash += move.From().GetCol() * 6961;
   hash += move.To().GetRow() * 7247;
   hash += move.To().GetCol() * 7349;
-  hash = hash % 1000;
+  hash = hash % AlphaBetaPlayer::kSearchHashBufferSize;
   return hash;
 }
 
@@ -36,6 +36,7 @@ AlphaBetaPlayer::AlphaBetaPlayer(std::optional<PlayerOptions> options) {
   if (options.has_value()) {
     options_ = options.value();
   }
+
   piece_evaluations_[PAWN] = 50;
   piece_evaluations_[KNIGHT] = 300;
   piece_evaluations_[BISHOP] = 400;
@@ -65,10 +66,6 @@ AlphaBetaPlayer::AlphaBetaPlayer(std::optional<PlayerOptions> options) {
   for (int i = 1; i < kMaxPly; i++) {
     reductions_[i] = int(10.0 * std::log(i));
   }
-
-//  if (options_.enable_history_heuristic) {
-//    ResetHistoryHeuristic();
-//  }
 
   for (int row = 0; row < 14; row++) {
     for (int col = 0; col < 14; col++) {
@@ -177,7 +174,13 @@ AlphaBetaPlayer::AlphaBetaPlayer(std::optional<PlayerOptions> options) {
     piece_activation_threshold_[ROOK] = 5;
   }
 
+  searching_ = new bool[kMaxPly * kSearchHashBufferSize];
 }
+
+AlphaBetaPlayer::~AlphaBetaPlayer() {
+  delete[] searching_;
+}
+
 
 ThreadState::ThreadState(
     PlayerOptions options, const Board& board, const PVInfo& pv_info)
@@ -232,15 +235,12 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
     bool isCutNode) {
   Board& board = thread_state.GetBoard();
   depth = std::max(depth, 0);
-  if (
-      //canceled_.load()
-      canceled_
+  if (canceled_
       || (deadline.has_value()
         && std::chrono::system_clock::now() >= deadline.value())) {
     return std::nullopt;
   }
   num_nodes_++;
-  //int alpha_orig = alpha;
   bool is_root_node = ply == 1;
 
   bool is_pv_node = node_type != NonPV;
@@ -281,8 +281,6 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
   Player player = board.GetTurn();
 
   int eval = Evaluate(thread_state, maximizing_player, alpha, beta);
-
-  //Team team = player.GetTeam();
 
   if (depth <= 0 || ply >= kMaxPly) {
 
@@ -359,13 +357,15 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
     piece_move_order_scores_,
     options_.enable_move_order_checks,
     moves,
-    kBufferPartitionSize,
-    thread_state.counter_moves);
+    kBufferPartitionSize
+   , thread_state.counter_moves
+    );
 
   bool has_legal_moves = false;
   int move_count = 0;
   int quiets = 0;
 
+  // some moves are deferred because another thread is searching them already
   int deferred_index = 0;
   std::vector<Move*> deferred_moves;
   bool processing_deferred = false;
@@ -420,20 +420,21 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
     }
 
     board.MakeMove(move);
-    //int64_t key_after = board.HashKey();
     int move_hash = MoveHash(move);
+    // hash value to promote threads searching on different branches
+    int search_hash = ply*kSearchHashBufferSize + move_hash;
+    bool maybe_defer = options_.enable_multithreading
+      && is_pv_node
+      && !processing_deferred;
 
-    if (options_.enable_multithreading && !processing_deferred) {
-      //int searching = searching_[ply][move_hash].fetch_add(1);
-      int searching = searching_[ply][move_hash]++;
+    if (maybe_defer) {
+      bool searching = searching_[search_hash] = true;
 
-      //int searching = transposition_table_->IncrSearching(key_after, 1);
       if (searching) {
         // move kept alive so long as move_picker is
         deferred_moves.push_back(move_ptr);
         // undo move and continue
-        searching_[ply][move_hash] = 0;
-        //transposition_table_->IncrSearching(key_after, -1);
+        searching_[search_hash] = false;
         board.UndoMove();
         continue;
       }
@@ -441,9 +442,8 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
 
     if (board.CheckWasLastMoveKingCapture() != IN_PROGRESS) {
       board.UndoMove();
-      if (options_.enable_multithreading && !processing_deferred) {
-        //transposition_table_->IncrSearching(key_after, -1);
-        searching_[ply][move_hash] = 0;
+      if (maybe_defer) {
+        searching_[search_hash] = false;
       }
 
       alpha = beta; // fail hard
@@ -455,9 +455,8 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
 
     if (board.IsKingInCheck(player)) { // invalid move
       board.UndoMove();
-      if (options_.enable_multithreading && !processing_deferred) {
-        //transposition_table_->IncrSearching(key_after, -1);
-        searching_[ply][move_hash] = 0;
+      if (maybe_defer) {
+        searching_[search_hash] = false;
       }
 
       continue;
@@ -540,8 +539,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
 
     board.UndoMove();
     if (options_.enable_multithreading && !processing_deferred) {
-      //transposition_table_->IncrSearching(key_after, -1);
-      searching_[ply][move_hash] = 0;
+      searching_[search_hash] = false;
     }
 
     if (options_.enable_mobility_evaluation
@@ -882,9 +880,7 @@ AlphaBetaPlayer::MakeMove(
       i, &thread_states, deadline, max_depth, this, &res, &mutex] {
       ThreadState& thread_state = thread_states[i];
       auto r = MakeMoveSingleThread(thread_state, deadline,
-          max_depth
-          //+ (i % 2 == 1)
-          );
+          max_depth);
       SetCanceled(true);
       std::lock_guard<std::mutex> lock(mutex);
       if (!res.has_value()) {
@@ -893,9 +889,6 @@ AlphaBetaPlayer::MakeMove(
       }
     }));
   }
-
-  //auto res = MakeMoveSingleThread(thread_states[0], deadline, max_depth);
-  //pv_info_ = thread_states[0].GetPVInfo();
 
   for (auto& thread : threads) {
     thread->join();

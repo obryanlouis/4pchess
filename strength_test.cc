@@ -14,8 +14,8 @@ namespace chess {
 
 constexpr int kNumGames = 100;
 constexpr int kMaxMovesPerGame = 200;
-constexpr int kNumThreads = 12;
-constexpr int kMoveTimeLimitMs = 5000;
+constexpr int kNumThreads = 1;
+constexpr int kMoveTimeLimitMs = 10000;
 
 namespace {
 
@@ -101,8 +101,10 @@ class StrengthTest {
       std::filesystem::create_directory(save_dir_.value());
     }
 
-    player1_options_.enable_counter_move_heuristic = false;
-    player2_options_.enable_counter_move_heuristic = true;
+    player1_options_.enable_multithreading = false;
+    player1_options_.num_threads = 1;
+    player2_options_.enable_multithreading = true;
+    player2_options_.num_threads = 12;
   }
 
   void Run() {

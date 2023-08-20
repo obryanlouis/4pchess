@@ -20,8 +20,9 @@ class MovePicker {
     int piece_move_order_scores[6],
     bool enable_move_order_checks,
     Move* buffer,
-    size_t buffer_size,
-    Move* counter_moves);
+    size_t buffer_size
+    ,Move* counter_moves
+    );
 
   // If this returns nullptr then there are no more moves
   Move* GetNextMove();

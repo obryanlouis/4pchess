@@ -297,7 +297,12 @@ void CommandLine::HandleCommand(
       }
       player_options_.num_threads = n_threads;
       player_options_.enable_multithreading = n_threads > 1;
+    } else {
+      SendInvalidCommandMessage("Unrecognized option: " + option_name);
+      return;
     }
+    StopEvaluation();
+    ResetPlayer();
 
   } else if (command == "register") {
     // ignore

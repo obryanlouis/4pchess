@@ -22,8 +22,9 @@ MovePicker::MovePicker(
     int piece_move_order_scores[6],
     bool enable_move_order_checks,
     Move* buffer,
-    size_t buffer_size,
-    Move* counter_moves) {
+    size_t buffer_size
+    ,Move* counter_moves
+    ) {
   enable_move_order_checks_ = enable_move_order_checks;
   stages_.resize(5);
   moves_ = buffer;
