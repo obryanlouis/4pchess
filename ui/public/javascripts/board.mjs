@@ -399,11 +399,40 @@ export class Board {
     this.piece_list[PlayerColor.Blue] = [];
     this.piece_list[PlayerColor.Yellow] = [];
     this.piece_list[PlayerColor.Green] = [];
+
+    this.piece_type_to_eval = {};
+    this.piece_type_to_eval[QUEEN] = 10;
+    this.piece_type_to_eval[ROOK] = 5;
+    this.piece_type_to_eval[BISHOP] = 4;
+    this.piece_type_to_eval[KNIGHT] = 3;
+    this.piece_type_to_eval[PAWN] = 1;
+    this.piece_type_to_eval[KING] = 0;
+
+    this.piece_eval = 0;
+
     for (let key in location_to_piece) {
       var loc, piece;
       [loc, piece] = location_to_piece[key];
       this.piece_list[piece.getColor()].push(new PlacedPiece(loc, piece));
+      this.piece_eval += this.getPieceEval(piece);
     }
+  }
+
+  getPieceEval(piece) {
+    var piece_type = piece.getPieceType();
+    var color = piece.getColor();
+    var piece_eval = this.piece_type_to_eval[piece_type];
+    if (piece_eval == null) {
+      console.log(piece)
+      console.log(piece_type)
+      console.log(color)
+      console.log(this.piece_type_to_eval)
+      throw new Error('piece eval is null');
+    }
+    if (color == BLUE || color == GREEN) {
+      piece_eval = -piece_eval;
+    }
+    return piece_eval;
   }
 
   makeMove(move) {
@@ -519,6 +548,7 @@ export class Board {
     this.location_to_piece[loc] = [loc, piece];
     // Add to piece_list_
     this.piece_list[piece.getColor()].push(new PlacedPiece(loc, piece));
+    this.piece_eval += this.getPieceEval(piece);
   }
 
   removePiece(loc) {
@@ -527,6 +557,7 @@ export class Board {
     if (piece == null) {
       throw new Error('piece == null');
     }
+    this.piece_eval -= this.getPieceEval(piece);
     var placed_pieces = this.piece_list[piece.getColor()];
     for (var i = 0; i < placed_pieces.length; i++) {
       var placed_piece = placed_pieces.at(i);
@@ -1279,6 +1310,10 @@ export class Board {
 //      }
 //    }
     return parts.join('\n');
+  }
+
+  pieceEval() {
+    return this.piece_eval;
   }
 
 }
