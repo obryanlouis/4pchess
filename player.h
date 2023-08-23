@@ -54,6 +54,7 @@ struct PlayerOptions {
   bool enable_lazy_eval = true;
   bool enable_piece_activation = true;
   bool enable_counter_move_heuristic = true;
+  bool enable_futility_pruning = true;
 
   bool enable_late_move_reduction = true;
   bool enable_late_move_pruning =   true;

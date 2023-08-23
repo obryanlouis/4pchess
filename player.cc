@@ -305,6 +305,18 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
 //    any_player_checked = board.IsKingInCheck(other_player);
 //  }
 
+  // futility pruning
+  if (options_.enable_futility_pruning
+      && !in_check
+      && !is_pv_node
+      && !is_tt_pv
+      && depth <= 8
+      && eval >= beta
+      && eval - 150 * depth >= beta
+      && eval < kMateValue) {
+    return std::make_tuple(beta, std::nullopt);
+  }
+
   // null move pruning
   if (options_.enable_null_move_pruning
       && !is_root_node // not root
@@ -320,6 +332,8 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
     // try the null move with possibly reduced depth
     PVInfo null_pvinfo;
     int r = std::min(depth / 3 + 1, depth - 1);
+    //int r = depth / 4 + 1 + std::min((eval - beta)/150, 6);
+
     auto value_and_move_or = Search(
         ss+1, NonPV, thread_state, ply + 1, depth - r - 1,
         -beta, -beta + 1, !maximizing_player, expanded, deadline, null_pvinfo,
