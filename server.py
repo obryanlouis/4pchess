@@ -63,7 +63,7 @@ class Server:
 
   def __init__(self):
     self._token = _read_api_token(_API_KEY_FILENAME)
-    self._uci = uci_wrapper.UciWrapper()
+    self._uci = uci_wrapper.UciWrapper(args.num_threads)
     self._api = api.Api(_SERVER_URL, self._token, _BOT_NAME, _BOT_VERSION)
     self._pgn4_info = None
     self._last_arrow_request = None
