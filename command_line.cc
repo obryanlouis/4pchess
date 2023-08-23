@@ -368,8 +368,8 @@ void CommandLine::HandleCommand(
 
   } else if (command == "go") {
     if (board_ == nullptr) {
-      SendInfoMessage("Need to set up board first");
-      return;
+      ResetPlayer();
+      ResetBoard();
     }
 
     // parse all options and then execute a search

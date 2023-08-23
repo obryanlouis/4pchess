@@ -5,6 +5,7 @@
 #include <tuple>
 
 #include "board.h"
+#include "stats.h"
 
 
 namespace chess {
@@ -16,13 +17,14 @@ class MovePicker {
     const std::optional<Move>& pvmove,
     Move* killers,
     int piece_evaluations[6],
-    int history_heuristic[14][14][14][14],
+    Stats<int, 14, 14, 14, 14>* history_heuristic,
+    Stats<int, kNumPieceTypes, 14, 14, kNumPieceTypes>* capture_history,
+    const Stats<int, kNumPieceTypes, 14, 14>** continuation_history,
     int piece_move_order_scores[6],
     bool enable_move_order_checks,
     Move* buffer,
-    size_t buffer_size
-    ,Move* counter_moves
-    );
+    size_t buffer_size,
+    const Move& counter_move);
 
   // If this returns nullptr then there are no more moves
   Move* GetNextMove();

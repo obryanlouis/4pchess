@@ -18,13 +18,14 @@ MovePicker::MovePicker(
     const std::optional<Move>& pvmove,
     Move* killers,
     int piece_evaluations[6],
-    int history_heuristic[14][14][14][14],
+    Stats<int, 14, 14, 14, 14>* history_heuristic,
+    Stats<int, kNumPieceTypes, 14, 14, kNumPieceTypes>* capture_history,
+    const Stats<int, kNumPieceTypes, 14, 14>** continuation_history,
     int piece_move_order_scores[6],
     bool enable_move_order_checks,
     Move* buffer,
-    size_t buffer_size
-    ,Move* counter_moves
-    ) {
+    size_t buffer_size,
+    const Move& counter_move) {
   enable_move_order_checks_ = enable_move_order_checks;
   stages_.resize(5);
   moves_ = buffer;
@@ -35,31 +36,51 @@ MovePicker::MovePicker(
     const auto& move = moves_[i];
 
     const auto capture = move.GetCapturePiece();
-    const auto piece = board.GetPiece(move.From());
+    const auto& piece = board.GetPiece(move.From());
+    const auto piece_type = piece.GetPieceType();
+    const auto& from = move.From();
+    const auto& to = move.To();
+    int to_row = to.GetRow();
+    int to_col = to.GetCol();
 
-    int score = piece_move_order_scores[piece.GetPieceType()];
+    int score = piece_move_order_scores[piece_type];
     if (pvmove.has_value() && move == pvmove.value()) {
       stages_[PV_MOVE].emplace_back(i, score);
-    } else if (killers != nullptr
-               && (killers[0] == move || killers[1] == move)) {
-      stages_[KILLER].emplace_back(i, score + (move == killers[0] ? 1 : 0));
+    } else if (killers[0] == move
+            || killers[1] == move
+            || counter_move == move
+            ) {
+      if (move == killers[0]) {
+        score += 2;
+      } else if (move == killers[1]) {
+        score += 1;
+      }
+      stages_[KILLER].emplace_back(i, score);
     } else if (move.IsCapture()) {
       // We'd ideally use SEE here, if it weren't so expensive to compute.
-      int captured_val = piece_evaluations[capture.GetPieceType()];
-      int attacker_val = piece_evaluations[piece.GetPieceType()];
+      PieceType attacker_piece_type = piece_type;
+      PieceType captured_piece_type = capture.GetPieceType();
+      int captured_val = piece_evaluations[captured_piece_type];
+      int attacker_val = piece_evaluations[attacker_piece_type];
       score += captured_val - attacker_val/100;
+      if (capture_history != nullptr) {
+        score += (*capture_history)[attacker_piece_type][to.GetRow()][to.GetCol()][captured_piece_type];
+      }
       if (attacker_val <= captured_val) {
         stages_[GOOD_CAPTURE].emplace_back(i, score);
       } else {
         stages_[BAD_CAPTURE].emplace_back(i, score);
       }
     } else {
-      const auto& from = move.From();
-      const auto& to = move.To();
-      score += history_heuristic[from.GetRow()][from.GetCol()][to.GetRow()][to.GetCol()];
-      if (move == counter_moves[from.GetRow()*14*14*14 + from.GetCol()*14*14
-          + to.GetRow()*14 + to.GetCol()]) {
-        score += 50;
+      if (history_heuristic != nullptr) {
+        score += 2 * (*history_heuristic)[from.GetRow()][from.GetCol()][to.GetRow()][to.GetCol()];
+      }
+      if (continuation_history != nullptr) {
+        score += 2 * (*continuation_history[0])[piece_type][to_row][to_col]
+               +     (*continuation_history[1])[piece_type][to_row][to_col]
+               +     (*continuation_history[2])[piece_type][to_row][to_col]
+               +     (*continuation_history[3])[piece_type][to_row][to_col]
+               ;
       }
 
       stages_[QUIET].emplace_back(i, score);

@@ -23,7 +23,14 @@ cc_library(
         ":board",
         ":transposition_table",
         ":move_picker",
+        ":stats",
     ],
+)
+
+cc_library(
+    name = "stats",
+    hdrs = ["stats.h"],
+    deps = [],
 )
 
 cc_test(
@@ -115,6 +122,7 @@ cc_library(
     hdrs = ["move_picker.h"],
     deps = [
         ":board",
+        ":stats",
     ]
 )
 

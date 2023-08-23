@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "board.h"
+#include "stats.h"
 #include "transposition_table.h"
 
 namespace chess {
@@ -41,7 +42,6 @@ constexpr int kKillersPerPly = 3;
 struct PlayerOptions {
   bool enable_move_order = true;
   bool enable_move_order_checks = true;
-  bool enable_history_heuristic = true;
   bool enable_mobility_evaluation = true;
   bool pvs = true;
   bool enable_killers = true;
@@ -50,10 +50,11 @@ struct PlayerOptions {
   bool enable_attacking_king_zone = true;
   bool enable_transposition_table = true;
   bool enable_check_extensions = true;
-  bool enable_piece_imbalance = true;
   bool enable_lazy_eval = true;
   bool enable_piece_activation = true;
-  bool enable_counter_move_heuristic = true;
+  bool enable_history_heuristic = true;
+  bool enable_capture_history_heuristic = true;
+  bool enable_piece_imbalance = true;
 
   bool enable_late_move_reduction = true;
   bool enable_late_move_pruning =   true;
@@ -63,8 +64,14 @@ struct PlayerOptions {
   int num_threads = 1;
 
   // generic test change
-  bool test = false;
+  bool test = true;
 
+  // under review:
+  bool enable_continuation_history = false;
+  bool enable_futility_pruning = true;
+
+  // not performant enough:
+  bool enable_counter_move_heuristic = false;
   bool enable_piece_square_table = false;
 
   size_t transposition_table_size = kTranspositionTableSize;
@@ -72,9 +79,17 @@ struct PlayerOptions {
 };
 
 struct Stack {
+  std::optional<Move> current_move;
   Move killers[2];
   bool tt_pv = false;
+  bool tt_hit = false;
+  bool in_check = false;
   int move_count = 0;
+  int static_eval = 0;
+  int stat_score = 0;
+  // continuation history
+  // indexed by (to_piece, to_row, to_col)
+  Stats<int, kNumPieceTypes, 14, 14>* continuation_history = nullptr;
 };
 
 enum NodeType {
@@ -95,18 +110,32 @@ class ThreadState {
   Move* GetNextMoveBufferPartition();
   void ReleaseMoveBufferPartition();
   int* NActivated() { return n_activated_; }
+  int* NMajor() { return n_major_; }
   int* TotalMoves() { return total_moves_; }
   PVInfo& GetPVInfo() { return pv_info_; }
   void ResetHistoryHeuristic();
 
   ~ThreadState();
 
+  // history heuristic for quiet moves
   // https://www.chessprogramming.org/History_Heuristic
-  // (from_row, from_col, to_row, to_col)
-  int history_heuristic[14][14][14][14];
+  // indexed by (from_row, from_col, to_row, to_col)
+  Stats<int, 14, 14, 14, 14>* history_heuristic = nullptr;
+
+  // capture history
+  // (attacker_piece, to_row, to_col, captured_piece)
+  Stats<int, kNumPieceTypes, 14, 14, kNumPieceTypes>* capture_history = nullptr;
+
+  // history of counter moves
   // https://www.chessprogramming.org/Countermove_Heuristic
-  // (from_row, from_col, to_row, to_col)
-  Move* counter_moves = nullptr;
+  // indexed by (prev_move_hash, this_move_hash)
+  Stats<Move, kNumPieceTypes, 14, 14>* counter_moves = nullptr;
+
+  // continuation history
+  // indexed by (is_check, is_capture, from_piece, from_row, from_col,
+  //             to_piece, to_row, to_col)
+  Stats<int, 2, 2, kNumPieceTypes, 14, 14, kNumPieceTypes, 14, 14>*
+    continuation_history = nullptr;
 
  private:
   PlayerOptions options_;
@@ -121,8 +150,12 @@ class ThreadState {
 
   int n_activated_[4] = {0, 0, 0, 0};
   int total_moves_[4] = {0, 0, 0, 0};
+  int n_major_[4] = {0, 0, 0, 0};
 
 };
+
+// hash buffer size per ply for hashed moves variable
+static constexpr int kSearchHashBufferSize = 1000;
 
 class AlphaBetaPlayer {
  public:
@@ -178,9 +211,6 @@ class AlphaBetaPlayer {
   void EnableDebug(bool enable) { enable_debug_ = enable; }
   int Reduction(int depth, int move_number) const;
 
-  // hash buffer size per ply for searching_ variable
-  static constexpr int kSearchHashBufferSize = 1000;
-
  private:
 
   std::optional<std::tuple<int, std::optional<Move>, int>>
@@ -190,12 +220,28 @@ class AlphaBetaPlayer {
       int max_depth = 20);
 
   void ResetMobilityScores(ThreadState& thread_state);
-  void UpdateQuietStats(Stack* ss, const Move& move);
   void UpdateMobilityEvaluation(ThreadState& thread_state, Player turn);
   bool HasShield(Board& board, PlayerColor color, const BoardLocation& king_loc);
   bool OnBackRank(const BoardLocation& king_loc);
 
-  int64_t num_nodes_ = 0; // debugging
+  void UpdateAllStats(
+    const Board& board,
+    ThreadState& thread_state,
+    Stack* ss, const Move& best_move,
+    // non-best quiets
+    int quiet_count, Move* quiets_searched,
+    // non-best captures
+    int capture_count, Move* captures_searched,
+    int depth, int best_value, int beta);
+  void UpdateQuietStats(
+      const Board& board, ThreadState& thread_state, Stack* ss,
+      const Move& move, int bonus);
+  void UpdateContinuationHistory(
+      const Board& board, ThreadState& thread_state, Stack* ss,
+      const Piece& piece, const BoardLocation& to, int bonus);
+
+  // debugging stats
+  int64_t num_nodes_ = 0;
   int64_t num_cache_hits_ = 0;
   int64_t num_null_moves_tried_ = 0;
   int64_t num_null_moves_pruned_ = 0;

@@ -20,14 +20,24 @@ namespace chess {
 
 namespace {
 
+constexpr int kSentinelStackSize = 12;
+
+int StatBonus(int depth) {
+  return 1 << depth;
+}
+
 int MoveHash(const Move& move) {
   int hash = 6833;
   hash += move.From().GetRow() * 6397;
   hash += move.From().GetCol() * 6961;
   hash += move.To().GetRow() * 7247;
   hash += move.To().GetCol() * 7349;
-  hash = hash % AlphaBetaPlayer::kSearchHashBufferSize;
+  hash = hash % kSearchHashBufferSize;
   return hash;
+}
+
+int FutilityMargin(int depth, bool no_tt_cut_node, bool improving) {
+  return (140 - 40 * no_tt_cut_node) * (depth - improving);
 }
 
 }  // namespace
@@ -57,6 +67,13 @@ AlphaBetaPlayer::AlphaBetaPlayer(std::optional<PlayerOptions> options) {
   king_attacker_values_[ROOK] = 40;
   king_attacker_values_[QUEEN] = 50;
   king_attacker_values_[KING] = 0;
+
+//  king_attacker_values_[PAWN] = 0;
+//  king_attacker_values_[KNIGHT] = 30;
+//  king_attacker_values_[BISHOP] = 30;
+//  king_attacker_values_[ROOK] = 40;
+//  king_attacker_values_[QUEEN] = 1000;
+//  king_attacker_values_[KING] = 0;
 
   if (options_.enable_transposition_table) {
     transposition_table_ = std::make_unique<TranspositionTable>(
@@ -186,12 +203,18 @@ ThreadState::ThreadState(
     PlayerOptions options, const Board& board, const PVInfo& pv_info)
   : options_(options), board_(board), pv_info_(pv_info) {
   move_buffer_ = new Move[kBufferPartitionSize * kBufferNumPartitions];
-  counter_moves = new Move[14*14*14*14];
+  counter_moves = new Stats<Move, kNumPieceTypes, 14, 14>();
+  history_heuristic = new Stats<int, 14, 14, 14, 14>();
+  capture_history = new Stats<int, kNumPieceTypes, 14, 14, kNumPieceTypes>();
+  continuation_history = new Stats<int, 2, 2, kNumPieceTypes, 14, 14, kNumPieceTypes, 14, 14>();
 }
 
 ThreadState::~ThreadState() {
   delete[] move_buffer_;
-  delete[] counter_moves;
+  delete counter_moves;
+  delete history_heuristic;
+  delete capture_history;
+  delete continuation_history;
 }
 
 Move* ThreadState::GetNextMoveBufferPartition() {
@@ -251,6 +274,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
     int64_t key = board.HashKey();
 
     const HashTableEntry* tte = transposition_table_->Get(key);
+    ss->tt_hit = false;
     if (tte != nullptr) {
       if (tte->key == key) { // valid entry
         if (tte->depth >= depth) {
@@ -265,7 +289,8 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
 
             if (tte->move.has_value()
                 && !tte->move->IsCapture()) {
-              UpdateQuietStats(ss, tte->move.value());
+              UpdateQuietStats(board, thread_state, ss, tte->move.value(),
+                  StatBonus(depth));
             }
 
             return std::make_tuple(
@@ -274,6 +299,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
         }
         tt_move = tte->move;
         is_tt_pv = tte->is_pv;
+        ss->tt_hit = true;
       }
     }
 
@@ -291,11 +317,13 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
     return std::make_tuple(eval, std::nullopt);
   }
 
-  (ss+2)->killers[0] = (ss+2)->killers[1] = Move();
-  ss->move_count = 0;
-
   bool in_check = board.IsKingInCheck(player);
   bool partner_checked = board.IsKingInCheck(GetPartner(player));
+
+  (ss+2)->killers[0] = (ss+2)->killers[1] = Move();
+  ss->move_count = 0;
+  ss->in_check = in_check;
+  ss->static_eval = eval;
 
 //  bool any_player_checked = in_check || partner_checked;
 //  if (!any_player_checked) {
@@ -305,7 +333,27 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
 //    any_player_checked = board.IsKingInCheck(other_player);
 //  }
 
+  bool improving = eval > (ss-4)->static_eval;
+
+  // futility pruning
+  int margin = FutilityMargin(depth, isCutNode && !ss->tt_hit, improving)
+    //+ (ss-1)->stat_score / 306
+    ;
+  //int margin = 700;
+
+  if (options_.enable_futility_pruning
+      && !in_check
+      && !is_pv_node
+      && !is_tt_pv
+      && depth <= 8
+      && eval >= beta
+      && eval - margin >= beta
+      && eval < kMateValue) {
+    return std::make_tuple(eval, std::nullopt);
+  }
+
   // null move pruning
+
   if (options_.enable_null_move_pruning
       && !is_root_node // not root
       && !is_pv_node // not a pv node
@@ -317,11 +365,28 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
     num_null_moves_tried_++;
     board.MakeNullMove();
 
+    ss->current_move = std::nullopt;
+    ss->continuation_history = &((*thread_state.continuation_history)[0][0][0][0][0]);
+
     // try the null move with possibly reduced depth
     PVInfo null_pvinfo;
-    int r = std::min(depth / 3 + 1, depth - 1);
+    int r = depth / 4 + 2 + std::min((eval-beta)/150, 6);
+
+    if (options_.test) {
+      r = std::min((eval - beta) / 173, 6) + depth / 3 + 4;
+    }
+
+//    if (options_.test
+//        && ply >= 3
+//        && (ss-2)->static_eval >= beta
+//        && !partner_checked) {
+//      r++;
+//    }
+
+    r = std::min(r, depth);
+
     auto value_and_move_or = Search(
-        ss+1, NonPV, thread_state, ply + 1, depth - r - 1,
+        ss+1, NonPV, thread_state, ply + 1, depth - r,
         -beta, -beta + 1, !maximizing_player, expanded, deadline, null_pvinfo,
         null_moves + 1);
 
@@ -348,27 +413,52 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
 
   std::optional<Move> pv_move = pvinfo.GetBestMove();
   Move* moves = thread_state.GetNextMoveBufferPartition();
+  Move counter_move;
+  const auto& last_move = (ss-1)->current_move;
+  if (last_move.has_value()) {
+    const auto& last_to = last_move.value().To();
+    const auto& last_piece = board.GetPiece(last_to);
+    counter_move = (*thread_state.counter_moves)[last_piece.GetPieceType()]
+      [last_to.GetRow()][last_to.GetCol()];
+  }
+
+  const Stats<int, kNumPieceTypes, 14, 14>* cont_history[] = {
+    (ss-1)->continuation_history,
+    (ss-4)->continuation_history,
+    (ss-8)->continuation_history,
+    (ss-12)->continuation_history,
+  };
+
   MovePicker move_picker(
     board,
     pv_move,
     ss->killers,
     piece_evaluations_,
     thread_state.history_heuristic,
+    thread_state.capture_history,
+    options_.enable_continuation_history ? cont_history : nullptr,
     piece_move_order_scores_,
     options_.enable_move_order_checks,
     moves,
-    kBufferPartitionSize
-   , thread_state.counter_moves
-    );
+    kBufferPartitionSize,
+    counter_move);
 
   bool has_legal_moves = false;
   int move_count = 0;
   int quiets = 0;
 
   // some moves are deferred because another thread is searching them already
-  int deferred_index = 0;
+  size_t deferred_index = 0;
   std::vector<Move*> deferred_moves;
   bool processing_deferred = false;
+
+  int quiet_count = 0;
+  int capture_count = 0;
+  // maximum #values to store -- only for stats
+  constexpr int kMaxQuietsSeached = 32;
+  constexpr int kMaxCapturesSearched = 64;
+  Move quiets_searched[kMaxQuietsSeached];
+  Move captures_searched[kMaxCapturesSearched];
 
   while (true) {
     Move* move_ptr = nullptr;
@@ -419,7 +509,34 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       continue;
     }
 
+//    if (options_.enable_futility_pruning
+//        && !is_root_node
+//        && !is_pv_node
+//        && alpha > -kMateValue
+//        && quiet
+//        && !in_check
+//        && depth < 10
+//        && eval + 112 + 138 * std::max(0, depth-2) <= alpha) {
+//      continue;
+//    }
+
+    const auto& from = move.From();
+    const auto& to = move.To();
+    const auto& moved_piece = board.GetPiece(to);
     board.MakeMove(move);
+    ss->current_move = move;
+    bool is_capture = move.IsCapture();
+    ss->continuation_history = &((*thread_state.continuation_history)[in_check][is_capture][moved_piece.GetPieceType()][to.GetRow()][to.GetCol()]);
+
+    auto moved_piece_type = moved_piece.GetPieceType();
+    ss->stat_score =
+        2 * (*thread_state.history_heuristic)[from.GetRow()][from.GetCol()][to.GetRow()][to.GetCol()]
+      + (*cont_history[0])[moved_piece_type][to.GetRow()][to.GetCol()]
+      + (*cont_history[1])[moved_piece_type][to.GetRow()][to.GetCol()]
+      + (*cont_history[2])[moved_piece_type][to.GetRow()][to.GetCol()]
+      + (*cont_history[3])[moved_piece_type][to.GetRow()][to.GetCol()]
+      - 4006;
+
     int move_hash = MoveHash(move);
     // hash value to promote threads searching on different branches
     int search_hash = ply*kSearchHashBufferSize + move_hash;
@@ -495,15 +612,18 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
     }
 
     bool lmr = lmr_cond1
-        && !delivers_check;
+        //&& !delivers_check
+        ;
+
+    int new_depth = depth - 1 + e;
+    int r = Reduction(depth, move_count + 1);
 
     if (lmr) {
       num_lmr_searches_++;
 
-      int r = Reduction(depth, move_count + 1);
       r = std::clamp(r, 0, depth - 2);
       value_and_move_or = Search(
-          ss+1, NonPV, thread_state, ply + 1, depth - 1 - r + e,
+          ss+1, NonPV, thread_state, ply + 1, new_depth - r,
           -alpha-1, -alpha, !maximizing_player, expanded + e,
           deadline, *child_pvinfo, null_moves, true);
       if (value_and_move_or.has_value()) {
@@ -511,15 +631,30 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
         if (score > alpha) {  // re-search
           num_lmr_researches_++;
           value_and_move_or = Search(
-              ss+1, NonPV, thread_state, ply + 1, depth - 1 + e,
+              ss+1, NonPV, thread_state, ply + 1, new_depth,
               -beta, -alpha, !maximizing_player, expanded + e,
               deadline, *child_pvinfo, null_moves, !isCutNode);
+
+          if (options_.enable_continuation_history
+              && value_and_move_or.has_value()) {
+            score = -std::get<0>(value_and_move_or.value());
+            int bonus = score <= alpha ? -StatBonus(new_depth)
+                      : score >= beta  ?  StatBonus(new_depth)
+                                       :  0;
+            UpdateContinuationHistory(
+                board, thread_state, ss, moved_piece, to, bonus);
+          }
         }
       }
 
     } else if (!is_pv_node || move_count > 1) {
+
+      if (move != tt_move && isCutNode) {
+        r += 2;
+      }
+
       value_and_move_or = Search(
-          ss+1, NonPV, thread_state, ply + 1, depth - 1 + e,
+          ss+1, NonPV, thread_state, ply + 1, new_depth - (r > 3),
           -alpha-1, -alpha, !maximizing_player, expanded + e,
           deadline, *child_pvinfo, null_moves, !isCutNode);
     }
@@ -532,7 +667,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
             && (is_root_node
               || -std::get<0>(value_and_move_or.value()) < beta))))) {
         value_and_move_or = Search(
-            ss+1, PV, thread_state, ply + 1, depth - 1 + e,
+            ss+1, PV, thread_state, ply + 1, new_depth,
             -beta, -alpha, !maximizing_player, expanded + e,
             deadline, *child_pvinfo, null_moves, false);
     }
@@ -560,19 +695,6 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       pvinfo.SetChild(child_pvinfo);
       pvinfo.SetBestMove(move);
 
-      if (!move.IsCapture()) {
-        const auto& from = move.From();
-        const auto& to = move.To();
-        if (options_.enable_history_heuristic) {
-          thread_state.history_heuristic[from.GetRow()][from.GetCol()]
-            [to.GetRow()][to.GetCol()] += (1 << depth);
-        }
-        if (options_.enable_counter_move_heuristic) {
-          thread_state.counter_moves[from.GetRow()*14*14*14 + from.GetCol()*14*14
-            + to.GetRow()*14 + to.GetCol()] = move;
-        }
-      }
-
       break; // cutoff
     }
     if (score > alpha) {
@@ -585,6 +707,17 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       best_move = move;
       pvinfo.SetChild(child_pvinfo);
       pvinfo.SetBestMove(move);
+    }
+  
+    // track non-best moves for stats
+    if (move != best_move)
+    {
+      bool capture = move.IsCapture();
+      if (capture && capture_count < kMaxCapturesSearched) {
+        captures_searched[capture_count++] = move;
+      } else if (!capture && quiet_count < kMaxQuietsSeached) {
+        quiets_searched[quiet_count++] = move;
+      }
     }
   }
 
@@ -605,9 +738,10 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
     transposition_table_->Save(board.HashKey(), depth, best_move, score, bound, is_pv_node);
   }
 
-  if (best_move.has_value()
-      && !best_move->IsCapture()) {
-    UpdateQuietStats(ss, *best_move);
+  if (best_move.has_value()) {
+    UpdateAllStats(board, thread_state, ss, best_move.value(),
+        quiet_count, quiets_searched, capture_count, captures_searched,
+        depth, score, beta);
   }
 
   // If no good move is found and the previous position was tt_pv, then the
@@ -621,11 +755,131 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
   return std::make_tuple(score, best_move);
 }
 
-void AlphaBetaPlayer::UpdateQuietStats(Stack* ss, const Move& move) {
+void AlphaBetaPlayer::UpdateAllStats(
+    const Board& board,
+    ThreadState& thread_state,
+    Stack* ss, const Move& best_move,
+    // non-best quiets
+    int quiet_count, Move* quiets_searched,
+    // non-best captures
+    int capture_count, Move* captures_searched,
+    int depth, int best_value, int beta) {
+
+  int quiet_move_bonus = StatBonus(depth + 1);
+  // if move is quiet:
+  if (!best_move.IsCapture()) {
+    // TODO: larger bonus if value exceeds beta plus margin
+    // requires fail-soft framework
+    //int best_move_bonus = best_value > beta + 145 ? quiet_move_bonus
+    //                                          : StatBonus(depth);
+    int best_move_bonus = quiet_move_bonus;
+
+    // update quiet stats
+    UpdateQuietStats(board, thread_state, ss, best_move, best_move_bonus);
+
+    // decrease stats of non-best quiet moves
+    for (int i = 0; i < quiet_count; ++i) {
+      const auto& move = quiets_searched[i];
+      const auto& from = move.From();
+      const auto& to = move.To();
+      if (options_.enable_history_heuristic) {
+        (*thread_state.history_heuristic)[from.GetRow()][from.GetCol()]
+          [to.GetRow()][to.GetCol()] -= best_move_bonus;
+      }
+      if (options_.enable_continuation_history) {
+        const auto& moved_piece = board.GetPiece(from);
+        UpdateContinuationHistory(board, thread_state, ss, moved_piece, to,
+            -best_move_bonus);
+      }
+    }
+
+  } else {  // move is capture
+    // increase capture history stats
+    if (options_.enable_capture_history_heuristic) {
+      const auto& from = best_move.From();
+      const auto& to = best_move.To();
+      const auto& attacker = board.GetPiece(from);
+      const auto& captured = board.GetPiece(to);
+      (*thread_state.capture_history)[attacker.GetPieceType()][to.GetRow()]
+        [to.GetCol()][captured.GetPieceType()] += quiet_move_bonus;
+    }
+  }
+
+//  // penalize early quiet moves from last ply that are refuted and are not
+//  // TT/killer moves
+//  const auto& last_move = (ss-1)->current_move;
+//  if (options_.enable_continuation_history
+//      && last_move.has_value()
+//      && !last_move->IsCapture()
+//      && (((ss-1)->move_count == 1 + (ss-1)->tt_hit)
+//        || (last_move == (ss-1)->killers[0]))) {
+//    const auto& last_move_to = last_move->To();
+//    const auto& last_piece = board.GetPiece(last_move_to);
+//    UpdateContinuationHistory(board, thread_state, ss-1, last_piece,
+//        last_move_to, -quiet_move_bonus);
+//  }
+
+  // decrease stats of non-best capture moves
+  for (int i = 0; i < capture_count; ++i) {
+    const auto& move = captures_searched[i];
+    const auto& from = move.From();
+    const auto& to = move.To();
+    const auto& attacker = board.GetPiece(from);
+    const auto& captured = board.GetPiece(to);
+    (*thread_state.capture_history)[attacker.GetPieceType()][to.GetRow()]
+      [to.GetCol()][captured.GetPieceType()] -= quiet_move_bonus;
+  }
+}
+
+void AlphaBetaPlayer::UpdateQuietStats(
+    const Board& board, ThreadState& thread_state, Stack* ss, const Move& move,
+    int bonus) {
+  // update killers
   if (options_.enable_killers) {
     if (ss->killers[0] != move) {
       ss->killers[1] = ss->killers[0];
       ss->killers[0] = move;
+    }
+  }
+
+  // update main history
+  const auto& from = move.From();
+  const auto& to = move.To();
+  if (options_.enable_history_heuristic) {
+    (*thread_state.history_heuristic)[from.GetRow()][from.GetCol()]
+      [to.GetRow()][to.GetCol()] += bonus;
+  }
+
+  // update continuation history
+  if (options_.enable_continuation_history) {
+    const auto& moved_piece = board.GetPiece(from);
+    UpdateContinuationHistory(board, thread_state, ss, moved_piece, to, bonus);
+  }
+
+  // update counter move history
+  if (options_.enable_counter_move_heuristic) {
+    const auto& last_move = (ss-1)->current_move;
+    if (last_move.has_value()) {
+      const auto& last_to = last_move.value().To();
+      const auto& last_piece = board.GetPiece(last_to);
+      (*thread_state.counter_moves)[last_piece.GetPieceType()]
+        [last_to.GetRow()][last_to.GetCol()] = move;
+    }
+  }
+}
+
+void AlphaBetaPlayer::UpdateContinuationHistory(
+    const Board& board, ThreadState& thread_state, Stack* ss,
+    const Piece& piece, const BoardLocation& to, int bonus) {
+
+  for (int i : {1, 4, 8, 12}) {
+    // only update the first 2 continuation histories if we are in check
+    if (ss->in_check && i > 4) {
+        break;
+    }
+    if ((ss-i)->current_move.has_value()) {
+      (*(ss-i)->continuation_history)[piece.GetPieceType()]
+        [to.GetRow()][to.GetCol()] += bonus;
     }
   }
 }
@@ -636,17 +890,6 @@ constexpr int kPieceImbalanceTable[16] = {
   0, -50, -100, -300, -600, -700, -800, -800,
   -800, -800, -800, -800, -800, -800, -800, -800,
 };
-
-int GetNumMajorPieces(const std::vector<PlacedPiece>& pieces) {
-  int num_major = 0;
-  for (const auto& placed_piece : pieces) {
-    PieceType pt = placed_piece.GetPiece().GetPieceType();
-    if (pt != PAWN && pt != KING) {
-      num_major++;
-    }
-  }
-  return num_major;
-}
 
 }  // namespace
 
@@ -697,9 +940,6 @@ int AlphaBetaPlayer::Evaluate(
             - team_activation_score(n_activated[BLUE], n_activated[GREEN]);
     }
 
-//    // DEBUG: return early
-//    return maximizing_player ? eval : -eval;
-
     // Mobility evaluation
     if (options_.enable_mobility_evaluation) {
       int* total_moves = thread_state.TotalMoves();
@@ -715,20 +955,15 @@ int AlphaBetaPlayer::Evaluate(
       return re + margin <= alpha || re >= beta + margin;
     };
 
-    int piece_development_margin = 400;
     int king_safety_margin = 600;
 
-    if (lazy_skip(piece_development_margin + king_safety_margin)) {
-      num_lazy_eval_++;
-      return maximizing_player ? eval : -eval;
-    }
-
     if (options_.enable_piece_imbalance) {
-      const auto& piece_list = board.GetPieceList();
-      int n_major_red = GetNumMajorPieces(piece_list[RED]);
-      int n_major_yellow = GetNumMajorPieces(piece_list[YELLOW]);
-      int n_major_blue = GetNumMajorPieces(piece_list[BLUE]);
-      int n_major_green = GetNumMajorPieces(piece_list[GREEN]);
+      int* n_major = thread_state.NMajor();
+
+      int n_major_red = n_major[RED];
+      int n_major_yellow = n_major[YELLOW];
+      int n_major_blue = n_major[BLUE];
+      int n_major_green = n_major[GREEN];
 
       int diff_ry = std::abs(n_major_red - n_major_yellow);
       int diff_bg = std::abs(n_major_blue - n_major_green);
@@ -826,7 +1061,9 @@ int AlphaBetaPlayer::Evaluate(
 }
 
 void ThreadState::ResetHistoryHeuristic() {
-  std::memset(history_heuristic, 0, (14*14*14*14) * sizeof(int) / sizeof(char));
+  history_heuristic->Fill(0);
+  capture_history->Fill(0);
+  continuation_history->Fill(0);
 }
 
 void AlphaBetaPlayer::ResetMobilityScores(ThreadState& thread_state) {
@@ -913,7 +1150,10 @@ AlphaBetaPlayer::MakeMoveSingleThread(
   bool maximizing_player = board.TeamToPlay() == RED_YELLOW;
   int searched_depth = 0;
   Stack stack[kMaxPly + 10];
-  Stack* ss = stack + 7;
+  Stack* ss = stack + kSentinelStackSize;
+  for (int i = 1; i <= kSentinelStackSize; i++) {
+    (ss-i)->continuation_history = &((*thread_state.continuation_history)[0][0][0][0][0]);
+  }
 
   while (next_depth <= max_depth) {
     std::optional<std::tuple<int, std::optional<Move>>> move_and_value;
@@ -991,6 +1231,7 @@ void AlphaBetaPlayer::UpdateMobilityEvaluation(
     PieceType last_piece_type = NO_PIECE;
     int n_pieces_activated = 0;
     int n_moves = 0;
+    int n_major = 0;
     for (size_t move_id = 0; move_id < num_moves; move_id++) {
       const auto& move = moves[move_id];
       const auto& from = move.From();
@@ -1005,6 +1246,7 @@ void AlphaBetaPlayer::UpdateMobilityEvaluation(
           last_loc = from;
           last_piece_type = piece_type;
           n_moves = 0;
+          n_major++;
         }
         n_moves++;
       }
@@ -1013,6 +1255,7 @@ void AlphaBetaPlayer::UpdateMobilityEvaluation(
       n_pieces_activated++;
     }
     thread_state.NActivated()[color] = n_pieces_activated;
+    thread_state.NMajor()[color] = n_major;
   }
 
   board.SetPlayer(curr_player);

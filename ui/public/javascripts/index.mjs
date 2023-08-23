@@ -358,8 +358,9 @@ function displayBoard() {
     var evaluation = parseFloat(eval_results['evaluation']);
     var eval_formatted = Number(evaluation).toFixed(1);
     var search_depth = eval_results['search_depth'];
+    var zero_move_eval = Number(parseFloat(eval_results['zero_move_evaluation'])).toFixed(1);
     var piece_eval = board.pieceEval();
-    var eval_html = `eval: ${eval_formatted}    depth: ${search_depth}    piece eval: ${piece_eval}`;
+    var eval_html = `eval: ${eval_formatted}    depth: ${search_depth}    zero-move eval: ${zero_move_eval}    piece eval: ${piece_eval}`;
     $('#eval_estimate').html(eval_html);
 
     var svg_parts = [];
