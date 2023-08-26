@@ -36,7 +36,7 @@ class TranspositionTable {
     }
   }
 
- void TranspositionTable::Clear();
+ void Clear();
 
  private:
   HashTableEntry* hash_table_ = nullptr;
