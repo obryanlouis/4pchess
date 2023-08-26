@@ -729,14 +729,6 @@ int AlphaBetaPlayer::Evaluate(
       return re + margin <= alpha || re >= beta + margin;
     };
 
-    int piece_development_margin = 400;
-    int king_safety_margin = 600;
-
-    if (lazy_skip(piece_development_margin + king_safety_margin)) {
-      num_lazy_eval_++;
-      return maximizing_player ? eval : -eval;
-    }
-
     if (options_.enable_piece_imbalance) {
       const auto& piece_list = board.GetPieceList();
       int n_major_red = GetNumMajorPieces(piece_list[RED]);
@@ -750,7 +742,8 @@ int AlphaBetaPlayer::Evaluate(
       eval += kPieceImbalanceTable[diff_ry] - kPieceImbalanceTable[diff_bg];
     }
 
-    if (lazy_skip(king_safety_margin)) {
+    constexpr int kKingSafetyMargin = 600;
+    if (lazy_skip(kKingSafetyMargin)) {
       num_lazy_eval_++;
       return maximizing_player ? eval : -eval;
     }
