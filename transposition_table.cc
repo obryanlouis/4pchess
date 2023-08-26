@@ -41,6 +41,9 @@ void TranspositionTable::Save(
   }
 }
 
+void TranspositionTable::Clear() {
+  memset(hash_table_, 0, sizeof(HashTableEntry) * table_size_);
+}
 
 }  // namespace chess
 
