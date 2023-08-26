@@ -39,6 +39,7 @@ void TranspositionTable::Save(
     entry.score = score;
     entry.bound = bound;
     entry.is_pv = is_pv;
+    entry.age = max_age;
   }
 }
 
