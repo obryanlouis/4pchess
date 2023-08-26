@@ -42,6 +42,19 @@ void TranspositionTable::Save(
   }
 }
 
+void TranspositionTable::AgeEntries() {
+  for (size_t i = 0; i < table_size_; ++i) {
+    HashTableEntry& entry = hash_table_[i];
+    if (entry.key != 0) { // Entry is in use
+      if (entry.age > 0) {
+        entry.age--;
+      } else {
+        entry.Clear(); // Clear the entry if age reaches 0
+      }
+    }
+  }
+}
+
 void TranspositionTable::Clear() {
   memset(hash_table_, 0, sizeof(HashTableEntry) * table_size_);
 }
