@@ -380,7 +380,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
   int quiets = 0;
 
   // some moves are deferred because another thread is searching them already
-  int deferred_index = 0;
+  size_t deferred_index = 0;
   std::vector<Move*> deferred_moves;
   bool processing_deferred = false;
 

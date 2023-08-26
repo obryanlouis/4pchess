@@ -66,7 +66,7 @@ struct PlayerOptions {
   // generic test change
   bool test = false;
 
-  bool enable_piece_square_table = false;
+  bool enable_piece_square_table = true;
 
   size_t transposition_table_size = kTranspositionTableSize;
   std::optional<int> max_search_depth;
