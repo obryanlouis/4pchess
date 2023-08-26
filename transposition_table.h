@@ -36,11 +36,12 @@ class TranspositionTable {
     }
   }
 
+ void TranspositionTable::Clear();
+
  private:
   HashTableEntry* hash_table_ = nullptr;
   size_t table_size_ = 0;
 };
-
 
 }  // namespace chess
 
