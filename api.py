@@ -9,6 +9,7 @@ except ImportError:
     from http.client import BadStatusLine as RemoteDisconnected
 import backoff
 
+
 # url enpoints.
 ENDPOINTS={
     "arrow":            "?token={}&arrows={}",
@@ -49,10 +50,11 @@ class Api:
         response.raise_for_status()
         return response.json()
 
-    def stream(self):
+    def stream(self, timeout=None):
         # get the stream data.
         url = urljoin(self.url, ENDPOINTS["stream"].format(self.token))
-        return requests.get(url, headers = self.header, stream = True)
+        return requests.get(url, headers = self.header, stream = True,
+                            timeout = timeout)
 
     def arrow(self, data: str):
         # send game arrows.
