@@ -355,11 +355,11 @@ function displayBoard() {
   var board_key = getBoardKey();
   var eval_results = board_key_to_eval[board_key];
   if (eval_results != null && 'evaluation' in eval_results) {
-    var evaluation = parseFloat(eval_results['evaluation']);
-    var eval_formatted = Number(evaluation).toFixed(1);
+    var evaluation = Number(parseFloat(eval_results['evaluation'])).toFixed(1);
     var search_depth = eval_results['search_depth'];
     var piece_eval = board.pieceEval();
-    var eval_html = `eval: ${eval_formatted}    depth: ${search_depth}    piece eval: ${piece_eval}`;
+    var static_eval = Number(parseFloat(eval_results['zero_move_evaluation'])).toFixed(1);
+    var eval_html = `eval: ${evaluation} static eval: ${static_eval} <br/> depth: ${search_depth} <br/> piece eval: ${piece_eval}`;
     $('#eval_estimate').html(eval_html);
 
     var svg_parts = [];

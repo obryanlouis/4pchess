@@ -39,37 +39,44 @@ constexpr int kMaxPly = 300;
 constexpr int kKillersPerPly = 3;
 
 struct PlayerOptions {
+  // for search
+  bool pvs = true;
+  bool enable_transposition_table = true;
+  bool enable_check_extensions = true;
+
+  // for move ordering
   bool enable_move_order = true;
   bool enable_move_order_checks = true;
   bool enable_history_heuristic = true;
-  bool enable_mobility_evaluation = true;
-  bool pvs = true;
   bool enable_killers = true;
+  bool enable_counter_move_heuristic = true;
+
+  // for evaluation
+  bool enable_piece_activation = true;
   bool enable_king_safety = true;
   bool enable_pawn_shield = true;
   bool enable_attacking_king_zone = true;
-  bool enable_transposition_table = true;
-  bool enable_check_extensions = true;
+  bool enable_mobility_evaluation = true;
   bool enable_piece_imbalance = true;
   bool enable_lazy_eval = true;
-  bool enable_piece_activation = true;
-  bool enable_counter_move_heuristic = true;
-  bool enable_futility_pruning = true;
+  bool enable_piece_square_table = true;
 
+  // for pruning / reduction
+  bool enable_futility_pruning = true;
   bool enable_late_move_reduction = true;
   bool enable_late_move_pruning =   true;
   bool enable_null_move_pruning =   true;
 
+  // for multithreading
   bool enable_multithreading = true;
   int num_threads = 1;
 
-  // generic test change
-  bool test = false;
-
-  bool enable_piece_square_table = true;
-
+  // transposition table
   size_t transposition_table_size = kTranspositionTableSize;
   std::optional<int> max_search_depth;
+
+  // generic test change
+  bool test = false;
 };
 
 struct Stack {

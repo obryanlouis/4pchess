@@ -398,6 +398,14 @@ void Player::MakeMove(const v8::FunctionCallbackInfo<v8::Value>& args) {
                v8::Number::New(isolate, evaluation)).Check();
     }
 
+    {
+      auto zero_move_res = player.MakeMove(*board, std::nullopt, 0);
+      auto zero_move_evaluation = std::get<0>(zero_move_res.value()) / 100.0;
+      res->Set(context, String::NewFromUtf8Literal(
+            isolate, "zero_move_evaluation"),
+          v8::Number::New(isolate, zero_move_evaluation)).Check();
+    }
+
     const chess::PVInfo* pv_info = &player.GetPVInfo();
     std::vector<Move> pv_moves;
     pv_moves.reserve(4);
