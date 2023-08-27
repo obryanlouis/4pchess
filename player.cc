@@ -297,14 +297,6 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
   bool in_check = board.IsKingInCheck(player);
   bool partner_checked = board.IsKingInCheck(GetPartner(player));
 
-//  bool any_player_checked = in_check || partner_checked;
-//  if (!any_player_checked) {
-//    // Note that the last player is not in check
-//    PlayerColor color = static_cast<PlayerColor>((player.GetColor() + 1) % 4);
-//    Player other_player(color);
-//    any_player_checked = board.IsKingInCheck(other_player);
-//  }
-
   // futility pruning
   if (options_.enable_futility_pruning
       && !in_check
@@ -501,7 +493,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
 
     // check extensions at early moves.
     if (options_.enable_check_extensions
-        && in_check
+        && delivers_check
         && move_count < 6
         && expanded < 3) {
       num_check_extensions_++;
