@@ -24,6 +24,7 @@ MovePicker::MovePicker(
     Move* buffer,
     size_t buffer_size
     ,Move* counter_moves
+    ,bool include_quiets
     ) {
   enable_move_order_checks_ = enable_move_order_checks;
   stages_.resize(5);
@@ -41,7 +42,8 @@ MovePicker::MovePicker(
     if (pvmove.has_value() && move == pvmove.value()) {
       stages_[PV_MOVE].emplace_back(i, score);
     } else if (killers != nullptr
-               && (killers[0] == move || killers[1] == move)) {
+               && (killers[0] == move || killers[1] == move)
+               && include_quiets) {
       stages_[KILLER].emplace_back(i, score + (move == killers[0] ? 1 : 0));
     } else if (move.IsCapture()) {
       // We'd ideally use SEE here, if it weren't so expensive to compute.
@@ -53,7 +55,7 @@ MovePicker::MovePicker(
       } else {
         stages_[BAD_CAPTURE].emplace_back(i, score);
       }
-    } else {
+    } else if (include_quiets) {
       const auto& from = move.From();
       const auto& to = move.To();
       score += history_heuristic[from.GetRow()][from.GetCol()][to.GetRow()][to.GetCol()];

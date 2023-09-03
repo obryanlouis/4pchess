@@ -360,6 +360,9 @@ void Player::MakeMove(const v8::FunctionCallbackInfo<v8::Value>& args) {
   SetLatestPlayer(player_ptr, board_hash);
   player_ptr->SetCanceled(false);
 
+  // for debugging
+  int zero_move_evaluation = player.StaticEvaluation(*board) / 100.0;
+
   int depth = args[1]->Int32Value(context).FromJust();
   // by default, there's no time limit
   std::optional<std::chrono::milliseconds> time_limit;
@@ -367,6 +370,7 @@ void Player::MakeMove(const v8::FunctionCallbackInfo<v8::Value>& args) {
   if (args[1]->IsInt32() && !secs.IsNothing() && secs.FromJust() > 0) {
     time_limit = std::chrono::milliseconds(1000 * secs.FromJust());
   }
+  
   //std::chrono::milliseconds time_limit(10'000);
   auto move_res = player.MakeMove(*board, time_limit, depth);
 
@@ -383,6 +387,11 @@ void Player::MakeMove(const v8::FunctionCallbackInfo<v8::Value>& args) {
 
     Local<Object> res = Object::New(isolate);
 
+    // for debugging
+    res->Set(context, String::NewFromUtf8Literal(
+          isolate, "zero_move_evaluation"),
+        v8::Number::New(isolate, zero_move_evaluation)).Check();
+
     if (std::isinf(evaluation)) {
       if (evaluation > 0) {
         // +inf
@@ -396,14 +405,6 @@ void Player::MakeMove(const v8::FunctionCallbackInfo<v8::Value>& args) {
     } else {
       res->Set(context, String::NewFromUtf8Literal(isolate, "evaluation"),
                v8::Number::New(isolate, evaluation)).Check();
-    }
-
-    {
-      auto zero_move_res = player.MakeMove(*board, std::nullopt, 0);
-      auto zero_move_evaluation = std::get<0>(zero_move_res.value()) / 100.0;
-      res->Set(context, String::NewFromUtf8Literal(
-            isolate, "zero_move_evaluation"),
-          v8::Number::New(isolate, zero_move_evaluation)).Check();
     }
 
     const chess::PVInfo* pv_info = &player.GetPVInfo();

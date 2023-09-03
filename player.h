@@ -43,6 +43,7 @@ struct PlayerOptions {
   bool pvs = true;
   bool enable_transposition_table = true;
   bool enable_check_extensions = true;
+  bool enable_qsearch = true;
 
   // for move ordering
   bool enable_move_order = true;
@@ -142,6 +143,7 @@ class AlphaBetaPlayer {
       Board& board,
       std::optional<std::chrono::milliseconds> time_limit = std::nullopt,
       int max_depth = 20);
+  int StaticEvaluation(Board& board);
   int Evaluate(ThreadState& thread_state, bool maximizing_player,
       int alpha = -kMateValue, int beta = kMateValue);
   void CancelEvaluation() { canceled_ = true; }
@@ -164,6 +166,17 @@ class AlphaBetaPlayer {
       PVInfo& pv_info,
       int null_moves = 0,
       bool isCutNode = false);
+
+  std::optional<std::tuple<int, std::optional<Move>>> QSearch(
+      Stack* ss,
+      NodeType node_type,
+      ThreadState& thread_state,
+      int depth, // called initially with depth = 0, further decreases
+      int alpha,
+      int beta,
+      bool maximizing_player,
+      const std::optional<std::chrono::time_point<std::chrono::system_clock>>& deadline,
+      PVInfo& pv_info);
 
   int64_t GetNumEvaluations() { return num_nodes_; }
   int64_t GetNumCacheHits() { return num_cache_hits_; }
@@ -202,6 +215,25 @@ class AlphaBetaPlayer {
   void UpdateMobilityEvaluation(ThreadState& thread_state, Player turn);
   bool HasShield(Board& board, PlayerColor color, const BoardLocation& king_loc);
   bool OnBackRank(const BoardLocation& king_loc);
+
+  // Returns SEE
+  int StaticExchangeEvaluation(
+      const Board& board, const BoardLocation& loc) const;
+
+  // Returns SEE for a capture. Does not apply to en-passant capture.
+  int StaticExchangeEvaluationCapture(
+      Board& board, const Move& move) const;
+
+  int ApproxSEECapture(
+      Board& board, const Move& move) const;
+
+  // Helper for SEE calculation
+  int StaticExchangeEvaluation(
+      int square_piece_eval,
+      const std::vector<int>& sorted_piece_values,
+      size_t pos,
+      const std::vector<int>& other_team_sorted_piece_values,
+      size_t other_team_pos) const;
 
   int64_t num_nodes_ = 0; // debugging
   int64_t num_cache_hits_ = 0;

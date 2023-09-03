@@ -22,6 +22,7 @@ class MovePicker {
     Move* buffer,
     size_t buffer_size
     ,Move* counter_moves
+    ,bool include_quiets = true
     );
 
   // If this returns nullptr then there are no more moves

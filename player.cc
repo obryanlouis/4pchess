@@ -280,16 +280,21 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
   }
   Player player = board.GetTurn();
 
-  int eval = Evaluate(thread_state, maximizing_player, alpha, beta);
+  if (depth <= 0) {
+    if (options_.enable_qsearch) {
+      return QSearch(ss, is_pv_node ? PV : NonPV, thread_state, 0, alpha, beta,
+          maximizing_player, deadline, pvinfo);
+    }
 
-  if (depth <= 0 || ply >= kMaxPly) {
-
+    int eval = Evaluate(thread_state, maximizing_player, alpha, beta);
     if (options_.enable_transposition_table) {
       transposition_table_->Save(board.HashKey(), 0, std::nullopt, eval, EXACT, is_pv_node);
     }
 
     return std::make_tuple(eval, std::nullopt);
   }
+
+  int eval = Evaluate(thread_state, maximizing_player, alpha, beta);
 
   (ss+2)->killers[0] = (ss+2)->killers[1] = Move();
   ss->move_count = 0;
@@ -627,6 +632,226 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
   return std::make_tuple(score, best_move);
 }
 
+std::optional<std::tuple<int, std::optional<Move>>>
+AlphaBetaPlayer::QSearch(
+    Stack* ss,
+    NodeType node_type,
+    ThreadState& thread_state,
+    int depth,
+    int alpha,
+    int beta,
+    bool maximizing_player,
+    const std::optional<std::chrono::time_point<std::chrono::system_clock>>& deadline,
+    PVInfo& pv_info) {
+  Board& board = thread_state.GetBoard();
+  if (canceled_
+      || (deadline.has_value()
+        && std::chrono::system_clock::now() >= deadline.value())) {
+    return std::nullopt;
+  }
+  if (depth < 0) {
+    num_nodes_++;
+  }
+
+  bool is_pv_node = node_type != NonPV;
+  int tt_depth = 0;
+
+  std::optional<Move> tt_move;
+
+  const HashTableEntry* tte = nullptr;
+  if (options_.enable_transposition_table) {
+    int64_t key = board.HashKey();
+
+    tte = transposition_table_->Get(key);
+    if (tte != nullptr) {
+      if (tte->key == key) { // valid entry
+        if (tte->depth >= tt_depth) {
+          num_cache_hits_++;
+          // at non-PV nodes check for an early TT cutoff
+          if (!is_pv_node
+              && (tte->bound == EXACT
+                || (tte->bound == LOWER_BOUND && tte->score >= beta)
+                || (tte->bound == UPPER_BOUND && tte->score <= alpha))
+             ) {
+
+            return std::make_tuple(
+                std::min(beta, std::max(alpha, tte->score)), std::nullopt);
+          }
+        }
+        tt_move = tte->move;
+      }
+    }
+
+  }
+
+  Player player = board.GetTurn();
+
+  bool in_check = board.IsKingInCheck(player);
+  //bool partner_checked = board.IsKingInCheck(GetPartner(player));
+
+  // initialize score
+  int best_value = -kMateValue;
+  if (in_check) {
+    best_value = -kMateValue;
+  } else {
+    // stand pat
+    best_value = Evaluate(thread_state, maximizing_player, alpha, beta);
+    if (best_value >= beta) {
+      if (options_.enable_transposition_table) {
+        transposition_table_->Save(
+            board.HashKey(), 0, std::nullopt, best_value, LOWER_BOUND, is_pv_node);
+      }
+
+      return std::make_tuple(best_value, std::nullopt);
+    }
+  }
+
+  std::optional<Move> best_move;
+  int player_color = static_cast<int>(player.GetColor());
+
+  int curr_n_activated = thread_state.NActivated()[player_color];
+  int curr_total_moves = thread_state.TotalMoves()[player_color];
+
+  std::optional<Move> pv_move = pv_info.GetBestMove();
+  Move* moves = thread_state.GetNextMoveBufferPartition();
+  MovePicker move_picker(
+    board,
+    pv_move,
+    ss->killers,
+    piece_evaluations_,
+    thread_state.history_heuristic,
+    piece_move_order_scores_,
+    options_.enable_move_order_checks,
+    moves,
+    kBufferPartitionSize
+   , thread_state.counter_moves
+   , /*include_quiets=*/in_check
+    );
+
+  int move_count = 0;
+  int quiet_check_evasions = 0;
+
+  while (true) {
+    Move* move_ptr = move_picker.GetNextMove();
+    if (move_ptr == nullptr) {
+      break;
+    }
+    Move& move = *move_ptr;
+    bool capture = move.IsCapture();
+    if (capture) {
+      if (move.GetStandardCapture().Present()) {
+        int see = StaticExchangeEvaluationCapture(board, move);
+        if (see < 0) {
+          continue;
+        }
+      }
+    } else if (!in_check) {
+      continue;
+    }
+
+    std::optional<std::tuple<int, std::optional<Move>>> value_and_move_or;
+
+    bool delivers_check = move.DeliversCheck(board);
+    board.MakeMove(move);
+    if (board.CheckWasLastMoveKingCapture() != IN_PROGRESS) {
+      board.UndoMove();
+
+      best_value = beta; // fail hard
+      best_move = move;
+      pv_info.SetBestMove(move);
+      break;
+    }
+
+    if (board.IsKingInCheck(player)) { // invalid move
+      board.UndoMove();
+      continue;
+    }
+
+    move_count++;
+
+    bool is_pv_move = pv_move.has_value() && pv_move.value() == move;
+
+    std::shared_ptr<PVInfo> child_pvinfo;
+    if (is_pv_move && pv_info.GetChild() != nullptr) {
+      child_pvinfo = pv_info.GetChild();
+    } else {
+      child_pvinfo = std::make_shared<PVInfo>();
+    }
+
+    // pruning
+    if (best_value > -kMateValue) {
+      if ((!delivers_check && move_count > 2)
+          || quiet_check_evasions > 1) {
+        board.UndoMove();
+        continue;
+      }
+    }
+
+    quiet_check_evasions += !capture && in_check;
+
+    if (options_.enable_mobility_evaluation
+        || options_.enable_piece_activation) {
+      UpdateMobilityEvaluation(thread_state, player);
+    }
+
+    value_and_move_or = QSearch(
+        ss+1, node_type, thread_state, depth - 1, -beta, -alpha, !maximizing_player,
+        deadline, *child_pvinfo);
+
+    board.UndoMove();
+
+    if (options_.enable_mobility_evaluation
+        || options_.enable_piece_activation) { // reset
+      thread_state.NActivated()[player_color] = curr_n_activated;
+      thread_state.TotalMoves()[player_color] = curr_total_moves;
+    }
+
+    if (!value_and_move_or.has_value()) {
+      thread_state.ReleaseMoveBufferPartition();
+      return std::nullopt; // timeout
+    }
+    int score = -std::get<0>(value_and_move_or.value());
+
+    if (!best_move.has_value()) {
+      best_move = move;
+      pv_info.SetChild(child_pvinfo);
+      pv_info.SetBestMove(move);
+    }
+    if (score > best_value) {
+      best_value = score;
+      if (score > alpha) {
+        best_move = move;
+        // update pv
+        if (is_pv_node) {
+          pv_info.SetChild(child_pvinfo);
+          pv_info.SetBestMove(move);
+        }
+        if (score < beta) {
+          alpha = score;
+        } else {
+          break;  // fail high
+        }
+      }
+    }
+  }
+
+  int score = best_value;
+  if (in_check && best_value == -kMateValue) {
+    // checkmate
+    score = std::min(beta, std::max(alpha, -kMateValue));
+  }
+
+  if (options_.enable_transposition_table) {
+    ScoreBound bound = beta <= alpha ? LOWER_BOUND : UPPER_BOUND;
+    transposition_table_->Save(board.HashKey(), tt_depth, best_move, score,
+        bound, is_pv_node);
+  }
+
+  thread_state.ReleaseMoveBufferPartition();
+  return std::make_tuple(score, best_move);
+}
+
+
 void AlphaBetaPlayer::UpdateQuietStats(Stack* ss, const Move& move) {
   if (options_.enable_killers) {
     if (ss->killers[0] != move) {
@@ -836,6 +1061,13 @@ void AlphaBetaPlayer::ResetMobilityScores(ThreadState& thread_state) {
       UpdateMobilityEvaluation(thread_state, player);
     }
   }
+}
+
+int AlphaBetaPlayer::StaticEvaluation(Board& board) {
+  auto pv_copy = pv_info_.Copy();
+  ThreadState thread_state(options_, board, *pv_copy);
+  ResetMobilityScores(thread_state);
+  return Evaluate(thread_state, true, -kMateValue, kMateValue);
 }
 
 std::optional<std::tuple<int, std::optional<Move>, int>>
@@ -1072,5 +1304,91 @@ std::shared_ptr<PVInfo> PVInfo::Copy() const {
   copy->SetChild(child);
   return copy;
 }
+
+///////// Begin SEE /////////////
+
+int AlphaBetaPlayer::StaticExchangeEvaluationCapture(
+    Board& board,
+    const Move& move) const {
+
+  const auto captured = move.GetStandardCapture();
+  assert(captured.Present());
+
+  int value = piece_evaluations_[captured.GetPieceType()];
+
+  board.MakeMove(move);
+  value -= StaticExchangeEvaluation(board, move.To());
+  board.UndoMove();
+  return value;
+}
+
+int AlphaBetaPlayer::StaticExchangeEvaluation(
+      const Board& board, const BoardLocation& loc) const {
+  constexpr size_t kLimit = 5;
+  PlacedPiece attackers_this_side[kLimit];
+  PlacedPiece attackers_that_side[kLimit];
+
+  size_t num_attackers_this_side = board.GetAttackers2(
+      attackers_this_side, kLimit, board.GetTurn().GetTeam(), loc);
+  size_t num_attackers_that_side = board.GetAttackers2(
+      attackers_that_side, kLimit, OtherTeam(board.GetTurn().GetTeam()), loc);
+
+  std::vector<int> piece_values_this_side;
+  piece_values_this_side.reserve(num_attackers_this_side);
+  std::vector<int> piece_values_that_side;
+  piece_values_that_side.reserve(num_attackers_that_side);
+
+  for (size_t i = 0; i < num_attackers_this_side; ++i) {
+    const auto& placed_piece = attackers_this_side[i];
+    int piece_eval = piece_evaluations_[placed_piece.GetPiece().GetPieceType()];
+    piece_values_this_side.push_back(piece_eval);
+  }
+
+  for (size_t i = 0; i < num_attackers_that_side; ++i) {
+    const auto& placed_piece = attackers_that_side[i];
+    int piece_eval = piece_evaluations_[placed_piece.GetPiece().GetPieceType()];
+    piece_values_that_side.push_back(piece_eval);
+  }
+
+  std::sort(piece_values_this_side.begin(), piece_values_this_side.end());
+  std::sort(piece_values_that_side.begin(), piece_values_that_side.end());
+
+  const auto attacking = board.GetPiece(loc);
+  assert(attacking.Present());
+  int attacked_piece_eval = piece_evaluations_[attacking.GetPieceType()];
+
+  return StaticExchangeEvaluation(
+      attacked_piece_eval,
+      piece_values_this_side,
+      0,
+      piece_values_that_side,
+      0);
+}
+
+int AlphaBetaPlayer::StaticExchangeEvaluation(
+    int square_piece_eval,
+    const std::vector<int>& sorted_piece_values,
+    size_t index,
+    const std::vector<int>& other_team_sorted_piece_values,
+    size_t other_index) const {
+  if (index >= sorted_piece_values.size()) {
+    return 0;
+  }
+  int value_capture = square_piece_eval - StaticExchangeEvaluation(
+      sorted_piece_values[index],
+      other_team_sorted_piece_values,
+      other_index,
+      sorted_piece_values,
+      index + 1);
+  return std::max(0, value_capture);
+}
+
+//int AlphaBetaPlayer::ApproxSEECapture(
+//    Board& board, const Move& move) const {
+//  return piece_evaluations_[board.GetPiece(move.To()).GetPieceType()]
+//    - piece_evaluations_[board.GetPiece(move.From()).GetPieceType()];
+//}
+
+///////// End SEE /////////////
 
 }  // namespace chess
