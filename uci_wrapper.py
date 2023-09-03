@@ -18,9 +18,10 @@ START_FEN_BY = "R-0,0,0,0-1,1,1,1-1,1,1,1-0,0,0,0-0-x,x,x,yR,yN,yB,yQ,yK,yB,yN,y
 
 class UciWrapper:
 
-  def __init__(self, num_threads):
+  def __init__(self, num_threads, max_depth):
     self._process = self.create_process()
     self._num_threads = num_threads
+    self._max_depth = max_depth
 
   def create_process(self):
     return subprocess.Popen(
@@ -66,6 +67,8 @@ class UciWrapper:
     time_limit_ms = max(time_limit_ms - buffer_ms, min_move_ms)
 
     msg = f'go movetime {time_limit_ms}'
+    if self._max_depth is not None:
+      msg += f' depth {self._max_depth}'
     start = time.time()
     self._process.stdin.write(msg + '\n')
 

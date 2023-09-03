@@ -19,6 +19,10 @@ parser.add_argument('-prod', '--prod', type=parse_bool, required=False,
 # recommended: max(1, #physical processors - 2)
 parser.add_argument('-num_threads', '--num_threads', type=int, required=False,
     default=10)
+parser.add_argument('-max_depth', '--max_depth', type=int, required=False,
+    default=18)
+parser.add_argument('-arrows', '--arrows', type=parse_bool, required=False,
+    default=False)
 args = parser.parse_args()
 
 
@@ -34,6 +38,7 @@ else:
 
 _MAX_MOVE_MS = 30000
 _MIN_REMAINING_MOVE_MS = 30000
+_MIN_MOVE_TIME_MS = 1000
 _DEBUG = True
 
 if _DEBUG:
@@ -69,7 +74,7 @@ class Server:
 
   def __init__(self):
     self._token = _read_api_token(_API_KEY_FILENAME)
-    self._uci = uci_wrapper.UciWrapper(args.num_threads)
+    self._uci = uci_wrapper.UciWrapper(args.num_threads, args.max_depth)
     self._api = api.Api(_SERVER_URL, self._token, _BOT_NAME, _BOT_VERSION)
     self._pgn4_info = None
     self._last_arrow_request = None
@@ -128,7 +133,8 @@ class Server:
 
         fen = fen.replace('\n', '')
         if 'gameOver' in fen:
-          self.clear_arrows()
+          if args.arrows:
+            self.clear_arrows()
           return True
 
         if fen == '4PCo':
@@ -165,6 +171,7 @@ class Server:
           move_time_ms += (clock_ms - min_remaining_ms) / 20
 
         move_time_ms = min(move_time_ms, max_move_ms)
+        move_time_ms = max(move_time_ms, _MIN_MOVE_TIME_MS)
 
 #        print('move_time_ms:', move_time_ms)
         res = self._uci.get_best_move(move_time_ms, self.display_arrows)
@@ -189,6 +196,8 @@ class Server:
     self._api.arrow('clear')
 
   def display_arrows(self, pv: list[str]):
+    if not args.arrows:
+      return
     parts = ['clear']
     for move in pv:
       parts.append(f'{move}-50')
