@@ -20,7 +20,7 @@ parser.add_argument('-prod', '--prod', type=parse_bool, required=False,
 parser.add_argument('-num_threads', '--num_threads', type=int, required=False,
     default=10)
 parser.add_argument('-max_depth', '--max_depth', type=int, required=False,
-    default=18)
+    default=16)
 parser.add_argument('-arrows', '--arrows', type=parse_bool, required=False,
     default=False)
 args = parser.parse_args()

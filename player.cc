@@ -864,8 +864,8 @@ void AlphaBetaPlayer::UpdateQuietStats(Stack* ss, const Move& move) {
 namespace {
 
 constexpr int kPieceImbalanceTable[16] = {
-  0, -50, -100, -300, -600, -700, -800, -800,
-  -800, -800, -800, -800, -800, -800, -800, -800,
+  0, -25, -50, -150, -300, -350, -400, -400,
+  -400, -400, -400, -400, -400, -400, -400, -400,
 };
 
 int GetNumMajorPieces(const std::vector<PlacedPiece>& pieces) {
