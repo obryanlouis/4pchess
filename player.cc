@@ -44,11 +44,11 @@ AlphaBetaPlayer::AlphaBetaPlayer(std::optional<PlayerOptions> options) {
   piece_evaluations_[QUEEN] = 1000;
   piece_evaluations_[KING] = 10000;
 
-  piece_move_order_scores_[PAWN] = 10;
-  piece_move_order_scores_[KNIGHT] = 20;
-  piece_move_order_scores_[BISHOP] = 30;
-  piece_move_order_scores_[ROOK] = 40;
-  piece_move_order_scores_[QUEEN] = 50;
+  piece_move_order_scores_[PAWN] = 1;
+  piece_move_order_scores_[KNIGHT] = 2;
+  piece_move_order_scores_[BISHOP] = 3;
+  piece_move_order_scores_[ROOK] = 4;
+  piece_move_order_scores_[QUEEN] = 5;
   piece_move_order_scores_[KING] = 0;
 
   king_attacker_values_[PAWN] = 0;

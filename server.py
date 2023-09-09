@@ -20,7 +20,7 @@ parser.add_argument('-prod', '--prod', type=parse_bool, required=False,
 parser.add_argument('-num_threads', '--num_threads', type=int, required=False,
     default=10)
 parser.add_argument('-max_depth', '--max_depth', type=int, required=False,
-    default=16)
+    default=20)
 parser.add_argument('-arrows', '--arrows', type=parse_bool, required=False,
     default=False)
 args = parser.parse_args()
@@ -43,6 +43,7 @@ _DEBUG = True
 
 if _DEBUG:
   _MIN_REMAINING_MOVE_MS = 120000
+#  _MIN_REMAINING_MOVE_MS = 60000
 
 
 def _read_api_token(filepath: str) -> str:
@@ -53,9 +54,10 @@ def _read_api_token(filepath: str) -> str:
 
 class Pgn4Info:
 
-  def __init__(self, base_time_ms: int, incr_time_ms: int):
+  def __init__(self, base_time_ms: int, incr_time_ms: int, delay_time_ms: int):
     self.base_time_ms = base_time_ms
     self.incr_time_ms = incr_time_ms
+    self.delay_time_ms = delay_time_ms
 
   @classmethod
   def FromString(cls, pgn4: str):
@@ -64,10 +66,18 @@ class Pgn4Info:
       return None
 #      raise ValueError(f'Could not parse time control from pgn4: {pgn4!r}')
     base_time_mins = float(m.group(1))
-    incr_time_secs = float(m.group(2))
+    extra_time_secs = m.group(2)
+    delay_time_secs = 0
+    incr_time_secs = 0
+    if extra_time_secs.endswith('D'):
+      delay_time_secs = float(extra_time_secs[:-1])
+    else:
+      incr_time_secs = float(extra_time_secs)
+
     base_time_ms = int(base_time_mins * 60 * 1000)
     incr_time_ms = int(incr_time_secs * 1000)
-    return Pgn4Info(base_time_ms, incr_time_ms)
+    delay_time_ms = int(delay_time_secs * 1000)
+    return Pgn4Info(base_time_ms, incr_time_ms, delay_time_ms)
 
 
 class Server:
@@ -165,7 +175,9 @@ class Server:
         clock_ms = float(json_response['clock'])
         assert self._pgn4_info is not None
         buffer_ms = 1000
-        move_time_ms = self._pgn4_info.incr_time_ms - buffer_ms
+        move_time_ms = (self._pgn4_info.delay_time_ms
+                        + self._pgn4_info.incr_time_ms
+                        - buffer_ms)
         min_remaining_ms = _MIN_REMAINING_MOVE_MS
         if clock_ms > min_remaining_ms:
           move_time_ms += (clock_ms - min_remaining_ms) / 20
