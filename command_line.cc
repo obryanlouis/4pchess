@@ -298,6 +298,24 @@ void CommandLine::HandleCommand(
       player_options_.num_threads = n_threads;
       player_options_.enable_multithreading = n_threads > 1;
     } else {
+      for (const auto name : {
+          "piece_eval_pawn",
+          "piece_eval_knight",
+          "piece_eval_bishop",
+          "piece_eval_rook",
+          "piece_eval_queen"}) {
+        if (name == option_name) {
+          try {
+            player_options_.piece_eval_pawn = std::stoi(option_value);
+            return;
+          } catch (const std::exception& e) {
+            SendInvalidCommandMessage(
+                "Invalid value for " + option_name + ": " + option_value);
+            return;
+          }
+        }
+      }
+
       SendInvalidCommandMessage("Unrecognized option: " + option_name);
       return;
     }

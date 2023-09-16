@@ -62,6 +62,12 @@ struct PlayerOptions {
   bool enable_lazy_eval = true;
   bool enable_piece_square_table = true;
 
+  int piece_eval_pawn = 50;
+  int piece_eval_knight = 300;
+  int piece_eval_bishop = 400;
+  int piece_eval_rook = 500;
+  int piece_eval_queen = 1000;
+
   // for pruning / reduction
   bool enable_futility_pruning = true;
   bool enable_late_move_reduction = true;

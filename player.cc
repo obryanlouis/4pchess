@@ -37,11 +37,11 @@ AlphaBetaPlayer::AlphaBetaPlayer(std::optional<PlayerOptions> options) {
     options_ = options.value();
   }
 
-  piece_evaluations_[PAWN] = 50;
-  piece_evaluations_[KNIGHT] = 300;
-  piece_evaluations_[BISHOP] = 400;
-  piece_evaluations_[ROOK] = 500;
-  piece_evaluations_[QUEEN] = 1000;
+  piece_evaluations_[PAWN] = options_.piece_eval_pawn;
+  piece_evaluations_[KNIGHT] = options_.piece_eval_knight;
+  piece_evaluations_[BISHOP] = options_.piece_eval_bishop;
+  piece_evaluations_[ROOK] = options_.piece_eval_rook;
+  piece_evaluations_[QUEEN] = options_.piece_eval_queen;
   piece_evaluations_[KING] = 10000;
 
   piece_move_order_scores_[PAWN] = 1;
@@ -361,7 +361,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
   Move* moves = thread_state.GetNextMoveBufferPartition();
   MovePicker move_picker(
     board,
-    pv_move,
+    pv_move.has_value() ? pv_move : tt_move,
     ss->killers,
     piece_evaluations_,
     thread_state.history_heuristic,
