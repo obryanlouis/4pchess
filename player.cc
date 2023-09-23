@@ -328,11 +328,11 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
 
     // try the null move with possibly reduced depth
     PVInfo null_pvinfo;
-    int r = std::min(depth / 3 + 1, depth - 1);
-    //int r = depth / 4 + 1 + std::min((eval - beta)/150, 6);
+    int r = std::min(depth / 3 + 2, depth);
+    //int r = depth / 4 + 2 + std::min((eval - beta)/150, 6);
 
     auto value_and_move_or = Search(
-        ss+1, NonPV, thread_state, ply + 1, depth - r - 1,
+        ss+1, NonPV, thread_state, ply + 1, depth - r,
         -beta, -beta + 1, !maximizing_player, expanded, deadline, null_pvinfo,
         null_moves + 1);
 
@@ -738,15 +738,17 @@ AlphaBetaPlayer::QSearch(
     }
     Move& move = *move_ptr;
     bool capture = move.IsCapture();
-    if (capture) {
-      if (move.GetStandardCapture().Present()) {
-        int see = StaticExchangeEvaluationCapture(board, move);
-        if (see < 0) {
-          continue;
+    if (!in_check) {
+      if (capture) {
+        if (move.GetStandardCapture().Present()) {
+          int see = StaticExchangeEvaluationCapture(board, move);
+          if (see < 0) {
+            continue;
+          }
         }
+      } else {
+        continue;
       }
-    } else if (!in_check) {
-      continue;
     }
 
     std::optional<std::tuple<int, std::optional<Move>>> value_and_move_or;

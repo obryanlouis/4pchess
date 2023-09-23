@@ -69,5 +69,19 @@ TEST(PlayerTest, EvaluateCheckmate4) {
   EXPECT_EQ(valuation, kMateValue);
 }
 
+TEST(PlayerTest, EvaluateNonCheckmate5) {
+  AlphaBetaPlayer player;
+
+  std::string fen = "G-0,0,0,0-0,1,1,0-0,1,1,0-0,0,0,0-1-x,x,x,yR,1,yB,yK,3,yR,x,x,x/x,x,x,yP,yP,yP,1,yP,yP,yB,yP,x,x,x/x,x,x,3,yP,rQ,1,yP,1,x,x,x/bR,bP,1,yN,8,gP,gR/3,bP,5,yN,2,gP,gN/bB,bP,11,gB/1,bP,9,gP,2/bK,1,bP,9,gP,gK/1,bP,9,gP,1,gB/1,bP,10,gP,gN/bR,bP,10,gP,gR/x,x,x,2,bB,rP,1,rP,2,x,x,x/x,x,x,1,rP,rP,1,rK,1,rB,gQ,x,x,x/x,x,x,rR,1,bN,5,x,x,x";
+
+  auto board = ParseBoardFromFEN(fen);
+
+  auto res = player.MakeMove(*board, std::nullopt, 1);
+  float valuation = std::get<0>(res.value());
+
+  EXPECT_LT(valuation, 0);
+  EXPECT_GT(valuation, -kMateValue);
+}
+
 
 }  // namespace chess

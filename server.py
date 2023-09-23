@@ -89,6 +89,7 @@ class Server:
     self._api = api.Api(_SERVER_URL, self._token, _BOT_NAME, _BOT_VERSION)
     self._pgn4_info = None
     self._last_arrow_request = None
+    self._move_number = 1
 
   def _read_streaming_response(self, response):
     for content in response.iter_content(chunk_size=None):
@@ -150,12 +151,16 @@ class Server:
 
         if fen == '4PCo':
           fen = uci_wrapper.START_FEN_OLD
+          self._move_number = 1
         elif fen == '4PC':
           fen = uci_wrapper.START_FEN_NEW
+          self._move_number = 1
         elif fen == '4PCb':
           fen = uci_wrapper.START_FEN_BY
+          self._move_number = 1
         elif fen == '4PCn':
           fen = uci_wrapper.START_FEN_BYG
+          self._move_number = 1
         else:
           # the response an FEN string?
           pass
@@ -167,11 +172,8 @@ class Server:
         max_move_ms = _MAX_MOVE_MS
 
 #        # DEBUG: to work around a chess.com API issue
-#        if last_move_num is not None:
-#          if last_move_num < 1:
-#            max_move_ms = 2000
-#          elif last_move_num < 3:
-#            max_move_ms = 5000
+        if self._move_number <= 2:
+          max_move_ms = 2000
 
         clock_ms = float(json_response['clock'])
         assert self._pgn4_info is not None
@@ -192,6 +194,7 @@ class Server:
           return True
 #        print('send move:', res['best_move'])
         play_response = self._api.play(res['best_move'])
+        self._move_number += 1
 #        print('play response:', play_response)
 
 #        # DEBUG: to work around a chess.com API issue
