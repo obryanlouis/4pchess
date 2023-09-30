@@ -44,6 +44,7 @@ struct PlayerOptions {
   bool enable_transposition_table = true;
   bool enable_check_extensions = true;
   bool enable_qsearch = true;
+  bool enable_aspiration_window = true;
 
   // for move ordering
   bool enable_move_order = true;
@@ -268,6 +269,12 @@ class AlphaBetaPlayer {
   bool enable_debug_ = false;
 
   int reductions_[kMaxPly];
+
+  int average_root_eval_ = 0;
+  int asp_nobs_ = 0;
+  int asp_sum_sq_ = 0;
+  int asp_sum_ = 0;
+  int64_t last_board_key_ = 0;
 
   // For evaluation
   int king_attack_weight_[30];

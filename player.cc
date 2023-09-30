@@ -1077,6 +1077,15 @@ AlphaBetaPlayer::MakeMove(
     Board& board,
     std::optional<std::chrono::milliseconds> time_limit,
     int max_depth) {
+  int64_t hash_key = board.HashKey();
+  if (hash_key != last_board_key_) {
+    average_root_eval_ = 0;
+    asp_nobs_ = 0;
+    asp_sum_ = 0;
+    asp_sum_sq_ = 0;
+  }
+  last_board_key_ = hash_key;
+
   SetCanceled(false);
   // Use Alpha-Beta search with iterative deepening
   std::optional<std::chrono::time_point<std::chrono::system_clock>> deadline;
@@ -1148,23 +1157,94 @@ AlphaBetaPlayer::MakeMoveSingleThread(
   Stack stack[kMaxPly + 10];
   Stack* ss = stack + 7;
 
-  while (next_depth <= max_depth) {
-    std::optional<std::tuple<int, std::optional<Move>>> move_and_value;
+  if (options_.enable_aspiration_window) {
 
-    move_and_value = Search(
-        ss, Root, thread_state, 1, next_depth, alpha, beta, maximizing_player,
-        0, deadline, pv_info);
+    while (next_depth <= max_depth) {
+      std::optional<std::tuple<int, std::optional<Move>>> move_and_value;
 
-    if (!move_and_value.has_value()) { // Hit deadline
-      break;
+      int prev = average_root_eval_;
+      int delta = 50;
+      if (asp_nobs_ > 0) {
+        delta = 50 + std::sqrt((asp_sum_sq_ - asp_sum_*asp_sum_/asp_nobs_)/asp_nobs_);
+      }
+
+      alpha = std::max(prev - delta, -kMateValue);
+      beta = std::min(prev + delta, kMateValue);
+      int fail_cnt = 0;
+
+      while (true) {
+        move_and_value = Search(
+            ss, Root, thread_state, 1, next_depth, alpha, beta, maximizing_player,
+            0, deadline, pv_info);
+        if (!move_and_value.has_value()) { // Hit deadline
+          break;
+        }
+        int evaluation = std::get<0>(move_and_value.value());
+        if (asp_nobs_ == 0) {
+          average_root_eval_ = evaluation;
+        } else {
+          average_root_eval_ = (2 * evaluation + average_root_eval_) / 3;
+        }
+        asp_nobs_++;
+        asp_sum_ += evaluation;
+        asp_sum_sq_ += evaluation * evaluation;
+
+        if (std::abs(evaluation) == kMateValue) {
+          break;
+        }
+
+        if (evaluation <= alpha) {
+          beta = (alpha + beta) / 2;
+          alpha = std::max(evaluation - delta, -kMateValue);
+          ++fail_cnt;
+        } else if (evaluation >= beta) {
+          beta = std::min(evaluation + delta, kMateValue);
+          ++fail_cnt;
+        } else {
+          break;
+        }
+
+        if (fail_cnt >= 5) {
+          alpha = -kMateValue;
+          beta = kMateValue;
+        }
+
+        delta += delta / 3;
+      }
+
+      if (!move_and_value.has_value()) { // Hit deadline
+        break;
+      }
+      res = move_and_value;
+      searched_depth = next_depth;
+      next_depth++;
+      int evaluation = std::get<0>(move_and_value.value());
+      if (std::abs(evaluation) == kMateValue) {
+        break;  // Proven win/loss
+      }
     }
-    res = move_and_value;
-    searched_depth = next_depth;
-    next_depth++;
-    int evaluation = std::get<0>(move_and_value.value());
-    if (std::abs(evaluation) == kMateValue) {
-      break;  // Proven win/loss
+
+  } else {
+
+    while (next_depth <= max_depth) {
+      std::optional<std::tuple<int, std::optional<Move>>> move_and_value;
+
+      move_and_value = Search(
+          ss, Root, thread_state, 1, next_depth, alpha, beta, maximizing_player,
+          0, deadline, pv_info);
+
+      if (!move_and_value.has_value()) { // Hit deadline
+        break;
+      }
+      res = move_and_value;
+      searched_depth = next_depth;
+      next_depth++;
+      int evaluation = std::get<0>(move_and_value.value());
+      if (std::abs(evaluation) == kMateValue) {
+        break;  // Proven win/loss
+      }
     }
+
   }
 
   if (res.has_value()) {

@@ -20,7 +20,7 @@ parser.add_argument('-prod', '--prod', type=parse_bool, required=False,
 parser.add_argument('-num_threads', '--num_threads', type=int, required=False,
     default=10)
 parser.add_argument('-max_depth', '--max_depth', type=int, required=False,
-    default=18)
+    default=20)
 parser.add_argument('-arrows', '--arrows', type=parse_bool, required=False,
     default=False)
 args = parser.parse_args()
@@ -114,6 +114,7 @@ class Server:
           if gameover:
 #            print('end streaming response after game end...')
 #            self._api.chat('Good game')
+            self._move_number = 1
             return
 #      if _DEBUG:
 #        return
@@ -173,7 +174,7 @@ class Server:
 
 #        # DEBUG: to work around a chess.com API issue
         if self._move_number <= 2:
-          max_move_ms = 2000
+          max_move_ms = 5000
 
         clock_ms = float(json_response['clock'])
         assert self._pgn4_info is not None
