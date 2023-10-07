@@ -77,7 +77,7 @@ struct PlayerOptions {
 
   // for multithreading
   bool enable_multithreading = true;
-  int num_threads = 1;
+  int num_threads = 8;
 
   // transposition table
   size_t transposition_table_size = kTranspositionTableSize;

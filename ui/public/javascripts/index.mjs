@@ -360,7 +360,9 @@ function displayBoard() {
     var piece_eval = board.pieceEval();
     var static_eval = Number(parseFloat(eval_results['zero_move_evaluation'])).toFixed(1);
     var eval_html = `eval: ${evaluation} static eval: ${static_eval} <br/> depth: ${search_depth} <br/> piece eval: ${piece_eval}`;
+    var turn_info = `side to move: ${board.turn.getColor().name}`; 
     $('#eval_estimate').html(eval_html);
+    $('#turn_info').html(turn_info);
 
     var svg_parts = [];
     for (const color of ['red', 'blue', 'yellow', 'green']) {

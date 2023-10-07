@@ -212,7 +212,7 @@ class StrengthTest {
 
       if (save_dir_.has_value()) {
         std::filesystem::path filepath = save_dir_.value() / ("game_" + std::to_string(game_id) + ".pgn");
-        SaveGame(filepath, board->Moves(), player2_moves_first,
+        SaveGame(filepath.string(), board->Moves(), player2_moves_first,
             player2_score, game_status);
       }
       FinishGame(player2_score);
