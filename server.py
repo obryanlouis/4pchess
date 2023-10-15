@@ -18,7 +18,7 @@ parser.add_argument('-prod', '--prod', type=parse_bool, required=False,
 # might need to set this to another value depending on your computer.
 # recommended: max(1, #physical processors - 2)
 parser.add_argument('-num_threads', '--num_threads', type=int, required=False,
-    default=10)
+    default=11)
 parser.add_argument('-max_depth', '--max_depth', type=int, required=False,
     default=20)
 parser.add_argument('-arrows', '--arrows', type=parse_bool, required=False,
