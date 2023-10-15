@@ -13,6 +13,7 @@ const player_id_to_color = {0: 'red', 1: 'blue', 2: 'yellow', 3: 'green'};
 var request_interval = null;
 var max_search_depth = null;
 var secs_per_move = null;
+var MATE_VALUE = 1000000;
 
 if (window.localStorage != null) {
   var max_depth = parseInt(window.localStorage['max_search_depth']);
@@ -551,6 +552,10 @@ function requestBoardEvaluation() {
       search_depth = max_search_depth;
     } else if (eval_results != null && 'req_depth' in eval_results) {
       search_depth = eval_results['req_depth'] + 1;
+      if ('evaluation' in eval_results
+          && Math.abs(eval_results['evaluation']) == MATE_VALUE) {
+        return;
+      }
     }
 
     var board_state = getBoardState();
