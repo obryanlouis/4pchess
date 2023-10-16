@@ -51,6 +51,14 @@ TEST(Speed, BoardTest) {
   int nps = (int) ((((float)player.GetNumEvaluations()) / duration.count())*1000.0);
   std::cout << "Nodes/sec: " << nps << std::endl;
   std::cout << "Nodes: " << player.GetNumEvaluations() << std::endl;
+  if (options.enable_razoring) {
+    int64_t n_razor = player.GetNumRazor();
+    int64_t n_razor_tested = player.GetNumRazorTested();
+    float pct_razor = 100.0 * (float) n_razor / (float) n_razor_tested;
+    std::cout << "#Razor: " << player.GetNumRazor() << std::endl;
+    std::cout << "#Razor tested: " << player.GetNumRazorTested() << std::endl;
+    std::cout << "% Razor success: " << pct_razor << std::endl;
+  }
   if (options.enable_check_extensions) {
     std::cout << "#Check extensions: " << player.GetNumCheckExtensions() << std::endl;
   }

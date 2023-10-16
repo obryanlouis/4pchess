@@ -232,7 +232,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
         std::chrono::time_point<std::chrono::system_clock>>& deadline,
     PVInfo& pvinfo,
     int null_moves,
-    bool isCutNode) {
+    bool is_cut_node) {
   Board& board = thread_state.GetBoard();
   depth = std::max(depth, 0);
   if (canceled_
@@ -299,8 +299,22 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
   (ss+2)->killers[0] = (ss+2)->killers[1] = Move();
   ss->move_count = 0;
 
+  if (options_.enable_razoring
+      && eval < (alpha - 300 - 250*depth*depth)) {
+    // do a qsearch
+    num_razor_tested_++;
+    auto res = QSearch(ss, NonPV, thread_state, 0, alpha-1, alpha, maximizing_player, deadline, pvinfo);
+    if (!res.has_value()) { // hit deadline
+      return std::nullopt;
+    }
+    eval = std::get<0>(res.value());
+    if (eval < alpha) {
+      num_razor_++;
+      return res;
+    }
+  }
+
   bool in_check = board.IsKingInCheck(player);
-  bool partner_checked = board.IsKingInCheck(GetPartner(player));
 
   // futility pruning
   if (options_.enable_futility_pruning
@@ -313,6 +327,8 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       && eval < kMateValue) {
     return std::make_tuple(beta, std::nullopt);
   }
+
+  bool partner_checked = board.IsKingInCheck(GetPartner(player));
 
   // null move pruning
   if (options_.enable_null_move_pruning
@@ -406,7 +422,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       && (move_count+1) > 1 + (is_pv_node && ply <= 1)
       && (!is_tt_pv
           || !move.IsCapture()
-          || (isCutNode && (ss-1)->move_count > 1))
+          || (is_cut_node && (ss-1)->move_count > 1))
       && !in_check
       && !partner_checked
          ;
@@ -512,6 +528,11 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       num_lmr_searches_++;
 
       int r = Reduction(depth, move_count + 1);
+
+      if (is_pv_node) {
+        r--;
+      }
+
       r = std::clamp(r, 0, depth - 2);
       value_and_move_or = Search(
           ss+1, NonPV, thread_state, ply + 1, depth - 1 - r + e,
@@ -524,7 +545,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
           value_and_move_or = Search(
               ss+1, NonPV, thread_state, ply + 1, depth - 1 + e,
               -beta, -alpha, !maximizing_player, expanded + e,
-              deadline, *child_pvinfo, null_moves, !isCutNode);
+              deadline, *child_pvinfo, null_moves, !is_cut_node);
         }
       }
 
@@ -532,7 +553,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       value_and_move_or = Search(
           ss+1, NonPV, thread_state, ply + 1, depth - 1 + e,
           -alpha-1, -alpha, !maximizing_player, expanded + e,
-          deadline, *child_pvinfo, null_moves, !isCutNode);
+          deadline, *child_pvinfo, null_moves, !is_cut_node);
     }
 
     // For PV nodes only, do a full PV search on the first move or after a fail

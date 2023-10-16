@@ -56,6 +56,10 @@ std::string GetPVStr(const AlphaBetaPlayer& player) {
 
 }  // namespace
 
+CommandLine::CommandLine() {
+  player_options_.num_threads = 1;
+}
+
 void CommandLine::Run() {
   // Runs on main thread
   while (running_) {

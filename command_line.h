@@ -38,6 +38,8 @@ struct EvaluationOptions {
 class CommandLine {
  public:
 
+  CommandLine();
+
   void Run();
 
  private:

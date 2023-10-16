@@ -74,6 +74,7 @@ struct PlayerOptions {
   bool enable_late_move_reduction = true;
   bool enable_late_move_pruning =   true;
   bool enable_null_move_pruning =   true;
+  bool enable_razoring = false;
 
   // for multithreading
   bool enable_multithreading = true;
@@ -172,7 +173,7 @@ class AlphaBetaPlayer {
       const std::optional<std::chrono::time_point<std::chrono::system_clock>>& deadline,
       PVInfo& pv_info,
       int null_moves = 0,
-      bool isCutNode = false);
+      bool is_cut_node = false);
 
   std::optional<std::tuple<int, std::optional<Move>>> QSearch(
       Stack* ss,
@@ -202,6 +203,8 @@ class AlphaBetaPlayer {
   int64_t GetNumFailHighReductions() { return num_fail_high_reductions_; }
   int64_t GetNumCheckExtensions() { return num_check_extensions_; }
   int64_t GetNumLazyEval() { return num_lazy_eval_; }
+  int64_t GetNumRazor() { return num_razor_; }
+  int64_t GetNumRazorTested() { return num_razor_tested_; }
 
   void EnableDebug(bool enable) { enable_debug_ = enable; }
   int Reduction(int depth, int move_number) const;
@@ -255,6 +258,8 @@ class AlphaBetaPlayer {
   int64_t num_fail_high_reductions_ = 0;
   int64_t num_check_extensions_ = 0;
   int64_t num_lazy_eval_ = 0;
+  int64_t num_razor_ = 0;
+  int64_t num_razor_tested_ = 0;
 
   bool canceled_ = false;
   int piece_evaluations_[6];
