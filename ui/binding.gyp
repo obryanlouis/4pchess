@@ -9,6 +9,7 @@
         "../player.cc",
         "../transposition_table.cc",
         "../move_picker.cc",
+        "../static_exchange.cc",
       ],
     }
   ]

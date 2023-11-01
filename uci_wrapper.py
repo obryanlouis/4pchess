@@ -74,7 +74,7 @@ class UciWrapper:
 
     def communicate(process, response, pv_callback):
       while True:
-        line = process.stdout.readline()
+        line = process.stdout.readline().strip()
         print(line)
         if 'Game completed' in line:
           response['gameover'] = True

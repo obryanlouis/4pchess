@@ -15,6 +15,7 @@
 #include "board.h"
 #include "player.h"
 #include "move_picker.h"
+#include "static_exchange.h"
 
 namespace chess {
 
@@ -386,6 +387,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
     moves,
     kBufferPartitionSize
    , thread_state.counter_moves
+   , /*include_quiets=*/true
     );
 
   bool has_legal_moves = false;
@@ -444,6 +446,25 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
         ) {
       num_lm_pruned_++;
       continue;
+    }
+
+    bool lmr = lmr_cond1
+        && !delivers_check;
+    int r = Reduction(depth, move_count + 1);
+    int new_depth = depth - 1;
+    int lmr_depth = std::max(new_depth - r, 0);
+
+    if (!is_root_node && alpha > -kMateValue) {
+      if (move.IsCapture() || delivers_check) {
+        if (!delivers_check && lmr_depth < 10 && !in_check) {
+          Piece capture_piece = move.GetCapturePiece();
+          PieceType capture_piece_type = capture_piece.GetPieceType();
+          int futility_eval = eval + 400 + 291 * lmr_depth + piece_evaluations_[capture_piece_type];
+          if (futility_eval < alpha) {
+            continue;
+          }
+        }
+      }
     }
 
     board.MakeMove(move);
@@ -521,13 +542,8 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       e = 1;
     }
 
-    bool lmr = lmr_cond1
-        && !delivers_check;
-
     if (lmr) {
       num_lmr_searches_++;
-
-      int r = Reduction(depth, move_count + 1);
 
       if (is_pv_node) {
         r--;
@@ -550,8 +566,13 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       }
 
     } else if (!is_pv_node || move_count > 1) {
+
+      if (!tt_move.has_value() && is_cut_node) {
+        r += 2;
+      }
+
       value_and_move_or = Search(
-          ss+1, NonPV, thread_state, ply + 1, depth - 1 + e,
+          ss+1, NonPV, thread_state, ply + 1, depth - 1 + e - (r > 3),
           -alpha-1, -alpha, !maximizing_player, expanded + e,
           deadline, *child_pvinfo, null_moves, !is_cut_node);
     }
@@ -559,14 +580,20 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
     // For PV nodes only, do a full PV search on the first move or after a fail
     // high (in the latter case search only if value < beta), otherwise let the
     // parent node fail low with value <= alpha and try another move.
-    if (is_pv_node && (move_count == 1 || (value_and_move_or.has_value() && (
-            -std::get<0>(value_and_move_or.value()) > alpha
-            && (is_root_node
-              || -std::get<0>(value_and_move_or.value()) < beta))))) {
-        value_and_move_or = Search(
-            ss+1, PV, thread_state, ply + 1, depth - 1 + e,
-            -beta, -alpha, !maximizing_player, expanded + e,
-            deadline, *child_pvinfo, null_moves, false);
+    bool full_search =
+      is_pv_node
+      && (move_count == 1
+          || (value_and_move_or.has_value()
+              && -std::get<0>(value_and_move_or.value()) > alpha
+              && (is_root_node
+                  || -std::get<0>(value_and_move_or.value()) < beta)
+              ));
+
+    if (full_search) {
+      value_and_move_or = Search(
+          ss+1, PV, thread_state, ply + 1, depth - 1 + e,
+          -beta, -alpha, !maximizing_player, expanded + e,
+          deadline, *child_pvinfo, null_moves, false);
     }
 
     board.UndoMove();
@@ -762,7 +789,7 @@ AlphaBetaPlayer::QSearch(
     if (!in_check) {
       if (capture) {
         if (move.GetStandardCapture().Present()) {
-          int see = StaticExchangeEvaluationCapture(board, move);
+          int see = StaticExchangeEvaluationCapture(piece_evaluations_, board, move);
           if (see < 0) {
             continue;
           }
@@ -1407,91 +1434,5 @@ std::shared_ptr<PVInfo> PVInfo::Copy() const {
   copy->SetChild(child);
   return copy;
 }
-
-///////// Begin SEE /////////////
-
-int AlphaBetaPlayer::StaticExchangeEvaluationCapture(
-    Board& board,
-    const Move& move) const {
-
-  const auto captured = move.GetStandardCapture();
-  assert(captured.Present());
-
-  int value = piece_evaluations_[captured.GetPieceType()];
-
-  board.MakeMove(move);
-  value -= StaticExchangeEvaluation(board, move.To());
-  board.UndoMove();
-  return value;
-}
-
-int AlphaBetaPlayer::StaticExchangeEvaluation(
-      const Board& board, const BoardLocation& loc) const {
-  constexpr size_t kLimit = 5;
-  PlacedPiece attackers_this_side[kLimit];
-  PlacedPiece attackers_that_side[kLimit];
-
-  size_t num_attackers_this_side = board.GetAttackers2(
-      attackers_this_side, kLimit, board.GetTurn().GetTeam(), loc);
-  size_t num_attackers_that_side = board.GetAttackers2(
-      attackers_that_side, kLimit, OtherTeam(board.GetTurn().GetTeam()), loc);
-
-  std::vector<int> piece_values_this_side;
-  piece_values_this_side.reserve(num_attackers_this_side);
-  std::vector<int> piece_values_that_side;
-  piece_values_that_side.reserve(num_attackers_that_side);
-
-  for (size_t i = 0; i < num_attackers_this_side; ++i) {
-    const auto& placed_piece = attackers_this_side[i];
-    int piece_eval = piece_evaluations_[placed_piece.GetPiece().GetPieceType()];
-    piece_values_this_side.push_back(piece_eval);
-  }
-
-  for (size_t i = 0; i < num_attackers_that_side; ++i) {
-    const auto& placed_piece = attackers_that_side[i];
-    int piece_eval = piece_evaluations_[placed_piece.GetPiece().GetPieceType()];
-    piece_values_that_side.push_back(piece_eval);
-  }
-
-  std::sort(piece_values_this_side.begin(), piece_values_this_side.end());
-  std::sort(piece_values_that_side.begin(), piece_values_that_side.end());
-
-  const auto attacking = board.GetPiece(loc);
-  assert(attacking.Present());
-  int attacked_piece_eval = piece_evaluations_[attacking.GetPieceType()];
-
-  return StaticExchangeEvaluation(
-      attacked_piece_eval,
-      piece_values_this_side,
-      0,
-      piece_values_that_side,
-      0);
-}
-
-int AlphaBetaPlayer::StaticExchangeEvaluation(
-    int square_piece_eval,
-    const std::vector<int>& sorted_piece_values,
-    size_t index,
-    const std::vector<int>& other_team_sorted_piece_values,
-    size_t other_index) const {
-  if (index >= sorted_piece_values.size()) {
-    return 0;
-  }
-  int value_capture = square_piece_eval - StaticExchangeEvaluation(
-      sorted_piece_values[index],
-      other_team_sorted_piece_values,
-      other_index,
-      sorted_piece_values,
-      index + 1);
-  return std::max(0, value_capture);
-}
-
-//int AlphaBetaPlayer::ApproxSEECapture(
-//    Board& board, const Move& move) const {
-//  return piece_evaluations_[board.GetPiece(move.To()).GetPieceType()]
-//    - piece_evaluations_[board.GetPiece(move.From()).GetPieceType()];
-//}
-
-///////// End SEE /////////////
 
 }  // namespace chess

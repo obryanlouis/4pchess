@@ -31,7 +31,7 @@ TEST(Speed, ThreadTest) {
   std::cout << "Duration (ms): " << duration.count() << std::endl;
 }
 
-TEST(Speed, BoardTest) {
+TEST(Speed, MoveTest) {
   auto start = std::chrono::system_clock::now();
   auto board = Board::CreateStandardSetup();
   PlayerOptions options;
@@ -41,9 +41,9 @@ TEST(Speed, BoardTest) {
   options.num_threads = 1;
   player.EnableDebug(true);
 
-  std::chrono::milliseconds time_limit(10000);
-  //auto res = player.MakeMove(*board, time_limit);
-  auto res = player.MakeMove(*board, std::nullopt, 18);
+  std::chrono::milliseconds time_limit(3000);
+  auto res = player.MakeMove(*board, time_limit);
+  //auto res = player.MakeMove(*board, std::nullopt, 18);
 
   auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
       std::chrono::system_clock::now() - start);
@@ -51,6 +51,11 @@ TEST(Speed, BoardTest) {
   int nps = (int) ((((float)player.GetNumEvaluations()) / duration.count())*1000.0);
   std::cout << "Nodes/sec: " << nps << std::endl;
   std::cout << "Nodes: " << player.GetNumEvaluations() << std::endl;
+
+  std::cout << "Test1: " << player.test1_ << std::endl;
+  std::cout << "Test2: " << player.test2_ << std::endl;
+  std::cout << "Test3: " << player.test3_ << std::endl;
+
   if (options.enable_razoring) {
     int64_t n_razor = player.GetNumRazor();
     int64_t n_razor_tested = player.GetNumRazorTested();

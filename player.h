@@ -212,6 +212,11 @@ class AlphaBetaPlayer {
   // hash buffer size per ply for searching_ variable
   static constexpr int kSearchHashBufferSize = 1000;
 
+  // for debugging
+  int64_t test1_ = 0;
+  int64_t test2_ = 0;
+  int64_t test3_ = 0;
+
  private:
 
   std::optional<std::tuple<int, std::optional<Move>, int>>
@@ -225,25 +230,6 @@ class AlphaBetaPlayer {
   void UpdateMobilityEvaluation(ThreadState& thread_state, Player turn);
   bool HasShield(Board& board, PlayerColor color, const BoardLocation& king_loc);
   bool OnBackRank(const BoardLocation& king_loc);
-
-  // Returns SEE
-  int StaticExchangeEvaluation(
-      const Board& board, const BoardLocation& loc) const;
-
-  // Returns SEE for a capture. Does not apply to en-passant capture.
-  int StaticExchangeEvaluationCapture(
-      Board& board, const Move& move) const;
-
-  int ApproxSEECapture(
-      Board& board, const Move& move) const;
-
-  // Helper for SEE calculation
-  int StaticExchangeEvaluation(
-      int square_piece_eval,
-      const std::vector<int>& sorted_piece_values,
-      size_t pos,
-      const std::vector<int>& other_team_sorted_piece_values,
-      size_t other_team_pos) const;
 
   int64_t num_nodes_ = 0; // debugging
   int64_t num_cache_hits_ = 0;

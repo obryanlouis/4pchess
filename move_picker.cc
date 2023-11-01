@@ -46,7 +46,6 @@ MovePicker::MovePicker(
                && include_quiets) {
       stages_[KILLER].emplace_back(i, score + (move == killers[0] ? 1 : 0));
     } else if (move.IsCapture()) {
-      // We'd ideally use SEE here, if it weren't so expensive to compute.
       int captured_val = piece_evaluations[capture.GetPieceType()];
       int attacker_val = piece_evaluations[piece.GetPieceType()];
       score += captured_val - attacker_val/100;
