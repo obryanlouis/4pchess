@@ -978,9 +978,6 @@ int AlphaBetaPlayer::Evaluate(
             - team_activation_score(n_activated[BLUE], n_activated[GREEN]);
     }
 
-//    // DEBUG: return early
-//    return maximizing_player ? eval : -eval;
-
     // Mobility evaluation
     if (options_.enable_mobility_evaluation) {
       int* total_moves = thread_state.TotalMoves();
@@ -1075,7 +1072,7 @@ int AlphaBetaPlayer::Evaluate(
                   }
                   int attack_zone = value_of_attacks * king_attack_weight_[num_attackers] / 100;
                   if (num_attacker_colors > 1) {
-                    attack_zone += 50;
+                    attack_zone += 150;
                   }
                   king_safety -= attack_zone;
                 }
