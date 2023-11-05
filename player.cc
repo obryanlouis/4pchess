@@ -410,8 +410,6 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       && (!is_tt_pv
           || !move.IsCapture()
           || (is_cut_node && (ss-1)->move_count > 1))
-      && !in_check
-      && !partner_checked
          ;
 
     if (lmr_cond1 || options_.enable_late_move_pruning) {
