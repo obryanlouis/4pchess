@@ -74,7 +74,6 @@ struct PlayerOptions {
   bool enable_late_move_reduction = true;
   bool enable_late_move_pruning =   true;
   bool enable_null_move_pruning =   true;
-  bool enable_razoring = false;
 
   // for multithreading
   bool enable_multithreading = true;

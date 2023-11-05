@@ -300,21 +300,6 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
   (ss+2)->killers[0] = (ss+2)->killers[1] = Move();
   ss->move_count = 0;
 
-  if (options_.enable_razoring
-      && eval < (alpha - 300 - 250*depth*depth)) {
-    // do a qsearch
-    num_razor_tested_++;
-    auto res = QSearch(ss, NonPV, thread_state, 0, alpha-1, alpha, maximizing_player, deadline, pvinfo);
-    if (!res.has_value()) { // hit deadline
-      return std::nullopt;
-    }
-    eval = std::get<0>(res.value());
-    if (eval < alpha) {
-      num_razor_++;
-      return res;
-    }
-  }
-
   bool in_check = board.IsKingInCheck(player);
 
   // futility pruning
