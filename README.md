@@ -13,6 +13,40 @@ teams chess engine.
 *  Node JS
 *  Bazel
 
+## Command line / UCI
+
+This project implements the chess UCI [protocol](https://gist.github.com/DOBRO/2592c6dad754ba67e6dcaec8c90165bf).
+
+To build, you have a couple of options:
+```
+# Option 1 (bazel):
+bazel build -c opt cli
+
+# Option 2 (g++):
+# Check the 'sh' file if you aren't on Unix
+./gpp_build.sh
+```
+
+After building, run the program:
+```
+bazel-bin/cli
+```
+
+Then, analyze a position as below.
+
+### From the start position
+
+```
+go
+```
+
+### From a position specified by FEN
+
+```
+position fen <some FEN>
+go
+```
+
 ## Play against the computer
 
 1. Initialize node js (one time):
