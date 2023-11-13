@@ -206,7 +206,6 @@ class AlphaBetaPlayer {
   int64_t GetNumRazorTested() { return num_razor_tested_; }
 
   void EnableDebug(bool enable) { enable_debug_ = enable; }
-  int Reduction(int depth, int move_number) const;
 
   // hash buffer size per ply for searching_ variable
   static constexpr int kSearchHashBufferSize = 1000;
@@ -257,8 +256,6 @@ class AlphaBetaPlayer {
   PVInfo pv_info_;
 
   bool enable_debug_ = false;
-
-  int reductions_[kMaxPly];
 
   int average_root_eval_ = 0;
   int asp_nobs_ = 0;

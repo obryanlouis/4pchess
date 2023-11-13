@@ -64,10 +64,6 @@ AlphaBetaPlayer::AlphaBetaPlayer(std::optional<PlayerOptions> options) {
         options_.transposition_table_size);
   }
 
-  for (int i = 1; i < kMaxPly; i++) {
-    reductions_[i] = int(10.0 * std::log(i));
-  }
-
   for (int row = 0; row < 14; row++) {
     for (int col = 0; col < 14; col++) {
       if (row <= 2 || row >= 11 || col <= 2 || col >= 11) {
@@ -207,11 +203,6 @@ void ThreadState::ReleaseMoveBufferPartition() {
   assert(buffer_id_ > 0);
   buffer_id_--;
 }
-
-int AlphaBetaPlayer::Reduction(int depth, int move_number) const {
-  return (reductions_[depth] * reductions_[move_number] + 1500) / 1000;
-}
-
 
 // Alpha-beta search with nega-max framework.
 // https://www.chessprogramming.org/Alpha-Beta
@@ -402,20 +393,20 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
 
     bool delivers_check = false;
 
-    bool lmr_cond1 =
+    bool lmr =
       options_.enable_late_move_reduction
       && depth > 1
-      // (this check is done before move_count is incremented, so use the next)
+      && move_count >= 4
+      && (move.IsCapture() || quiets >= 2)
+      && !is_pv_node
       && (move_count+1) > 1 + (is_pv_node && ply <= 1)
       && (!is_tt_pv
           || !move.IsCapture()
           || (is_cut_node && (ss-1)->move_count > 1))
          ;
 
-    if (lmr_cond1 || options_.enable_late_move_pruning) {
-      // this has to be called before the move is made
-      delivers_check = move.DeliversCheck(board);
-    }
+    // this has to be called before the move is made
+    delivers_check = move.DeliversCheck(board);
 
     bool quiet = !in_check && !move.IsCapture() && !delivers_check
       ;
@@ -431,22 +422,39 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       continue;
     }
 
-    bool lmr = lmr_cond1
-        && !delivers_check;
-    int r = Reduction(depth, move_count + 1);
-    int new_depth = depth - 1;
-    int lmr_depth = std::max(new_depth - r, 0);
+    int r = 2 + depth / 3 + std::min(move_count / 10, 1);
+    if (delivers_check) {
+      r -= 1;
+      if (move.IsCapture()) {
+        r -= 1;
+      }
+    }
+    if (move.IsCapture()) {
+      r -= 1;
+    }
+    if (in_check || partner_checked) {
+      r -= 1;
+    }
 
-    if (!is_root_node && alpha > -kMateValue) {
-      if (move.IsCapture() || delivers_check) {
-        if (!delivers_check && lmr_depth < 10 && !in_check) {
-          Piece capture_piece = move.GetCapturePiece();
-          PieceType capture_piece_type = capture_piece.GetPieceType();
-          int futility_eval = eval + 400 + 291 * lmr_depth + piece_evaluations_[capture_piece_type];
-          if (futility_eval < alpha) {
-            continue;
-          }
-        }
+    r = std::max(r, 0);
+
+    int new_depth = depth - 1;
+    int lmr_depth = new_depth;
+    if (lmr) {
+      lmr_depth = std::max(new_depth - r, 0);
+    }
+
+    if (!is_root_node
+        && alpha > -kMateValue
+        && lmr
+        && move.IsCapture()
+        && lmr_depth < 10
+        && !in_check) {
+      Piece capture_piece = move.GetCapturePiece();
+      PieceType capture_piece_type = capture_piece.GetPieceType();
+      int futility_eval = eval + 400 + 291 * lmr_depth + piece_evaluations_[capture_piece_type];
+      if (futility_eval < alpha) {
+        continue;
       }
     }
 
@@ -528,11 +536,8 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
     if (lmr) {
       num_lmr_searches_++;
 
-      if (is_pv_node) {
-        r--;
-      }
+      r = std::clamp(r, 0, depth - 1);
 
-      r = std::clamp(r, 0, depth - 2);
       value_and_move_or = Search(
           ss+1, NonPV, thread_state, ply + 1, depth - 1 - r + e,
           -alpha-1, -alpha, !maximizing_player, expanded + e,
@@ -623,6 +628,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       pvinfo.SetChild(child_pvinfo);
       pvinfo.SetBestMove(move);
     }
+
     if (!best_move.has_value()) {
       best_move = move;
       pvinfo.SetChild(child_pvinfo);

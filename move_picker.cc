@@ -86,7 +86,7 @@ Move* MovePicker::GetNextMove() {
       if (enable_move_order_checks_) {
         for (auto& item : stage_vec) {
           if (moves_[item.index].DeliversCheck(*board_)) {
-            item.score += 10'00;
+            item.score += stage_ == QUIET ? 100'000 : 10'00;
           }
         }
       }

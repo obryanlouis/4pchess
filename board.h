@@ -304,6 +304,9 @@ class Move {
   Piece GetStandardCapture() const {
     return standard_capture_;
   }
+  bool IsStandardCapture() const {
+    return standard_capture_.Present();
+  }
   PieceType GetPromotionPieceType() const {
     return promotion_piece_type_;
   }

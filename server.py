@@ -20,7 +20,7 @@ parser.add_argument('-prod', '--prod', type=parse_bool, required=False,
 parser.add_argument('-num_threads', '--num_threads', type=int, required=False,
     default=11)
 parser.add_argument('-max_depth', '--max_depth', type=int, required=False,
-    default=20)
+    default=30)
 parser.add_argument('-arrows', '--arrows', type=parse_bool, required=False,
     default=False)
 args = parser.parse_args()
@@ -39,12 +39,7 @@ else:
 _MAX_MOVE_MS = 30000
 _MIN_REMAINING_MOVE_MS = 30000
 _MIN_MOVE_TIME_MS = 1000
-_PER_MOVE_BUFFER_MS = 1000
 _DEBUG = True
-
-if _DEBUG:
-#  _MIN_REMAINING_MOVE_MS = 120000
-  _MIN_REMAINING_MOVE_MS = 60000
 
 
 def _read_api_token(filepath: str) -> str:
@@ -178,9 +173,12 @@ class Server:
 
         clock_ms = float(json_response['clock'])
         assert self._pgn4_info is not None
-        move_time_ms = (self._pgn4_info.delay_time_ms
-                        + self._pgn4_info.incr_time_ms
-                        - _PER_MOVE_BUFFER_MS)
+        incr_ms = self._pgn4_info.incr_time_ms
+        buffer_ms = 1000
+        if incr_ms <= 1000:
+          buffer_ms = 250
+
+        move_time_ms = self._pgn4_info.delay_time_ms + incr_ms - buffer_ms
         min_remaining_ms = _MIN_REMAINING_MOVE_MS
         if clock_ms > min_remaining_ms:
           move_time_ms += (clock_ms - min_remaining_ms) / 20
