@@ -36,7 +36,7 @@ TEST(PlayerTest, EvaluateCheckmate2) {
   auto board = ParseBoardFromFEN(fen);
 
   // best: 8
-  auto res = player.MakeMove(*board, std::nullopt, 15);
+  auto res = player.MakeMove(*board, std::nullopt, 20);
   float valuation = std::get<0>(res.value());
 
   EXPECT_EQ(valuation, kMateValue);
@@ -63,7 +63,7 @@ TEST(PlayerTest, EvaluateCheckmate4) {
   auto board = ParseBoardFromFEN(fen);
 
   // best: 4
-  auto res = player.MakeMove(*board, std::nullopt, 12);
+  auto res = player.MakeMove(*board, std::nullopt, 16);
   float valuation = std::get<0>(res.value());
 
   EXPECT_EQ(valuation, kMateValue);

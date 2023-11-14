@@ -33,7 +33,7 @@ MovePicker::MovePicker(
   board_ = &board;
 
   for (size_t i = 0; i < num_moves_; i++) {
-    const auto& move = moves_[i];
+    auto& move = moves_[i];
 
     const auto capture = move.GetCapturePiece();
     const auto piece = board.GetPiece(move.From());
@@ -48,7 +48,8 @@ MovePicker::MovePicker(
     } else if (move.IsCapture()) {
       int captured_val = piece_evaluations[capture.GetPieceType()];
       int attacker_val = piece_evaluations[piece.GetPieceType()];
-      score += captured_val - attacker_val/100;
+      int incr_score = captured_val - attacker_val/100;
+      score += incr_score;
       if (attacker_val <= captured_val) {
         stages_[GOOD_CAPTURE].emplace_back(i, score);
       } else {

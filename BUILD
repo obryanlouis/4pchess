@@ -27,7 +27,6 @@ cc_library(
         ":board",
         ":transposition_table",
         ":move_picker",
-        ":static_exchange",
     ],
 )
 
@@ -118,15 +117,6 @@ cc_library(
     name = "move_picker",
     srcs = ["move_picker.cc"],
     hdrs = ["move_picker.h"],
-    deps = [
-        ":board",
-    ]
-)
-
-cc_library(
-    name = "static_exchange",
-    srcs = ["static_exchange.cc"],
-    hdrs = ["static_exchange.h"],
     deps = [
         ":board",
     ]

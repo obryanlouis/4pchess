@@ -45,6 +45,7 @@ struct PlayerOptions {
   bool enable_check_extensions = true;
   bool enable_qsearch = true;
   bool enable_aspiration_window = true;
+  bool enable_probcut = true;
 
   // for move ordering
   bool enable_move_order = true;

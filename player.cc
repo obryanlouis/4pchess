@@ -15,7 +15,7 @@
 #include "board.h"
 #include "player.h"
 #include "move_picker.h"
-#include "static_exchange.h"
+//#include "static_exchange.h"
 
 namespace chess {
 
@@ -391,7 +391,8 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
 
     std::optional<std::tuple<int, std::optional<Move>>> value_and_move_or;
 
-    bool delivers_check = false;
+    // this has to be called before the move is made
+    bool delivers_check = move.DeliversCheck(board);
 
     bool lmr =
       options_.enable_late_move_reduction
@@ -399,14 +400,13 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       && move_count >= 4
       && (move.IsCapture() || quiets >= 2)
       && !is_pv_node
-      && (move_count+1) > 1 + (is_pv_node && ply <= 1)
+      && move_count > (is_pv_node && ply <= 1)
       && (!is_tt_pv
           || !move.IsCapture()
           || (is_cut_node && (ss-1)->move_count > 1))
+      && (!move.IsStandardCapture() || (
+            !delivers_check && move.ApproxSEE(board, piece_evaluations_) < 0))
          ;
-
-    // this has to be called before the move is made
-    delivers_check = move.DeliversCheck(board);
 
     bool quiet = !in_check && !move.IsCapture() && !delivers_check
       ;
@@ -423,6 +423,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
     }
 
     int r = 2 + depth / 3 + std::min(move_count / 10, 1);
+
     if (delivers_check) {
       r -= 1;
       if (move.IsCapture()) {

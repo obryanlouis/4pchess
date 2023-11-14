@@ -351,6 +351,8 @@ class Move {
   std::string PrettyStr() const;
   // NOTE: This does not find discovered checks.
   bool DeliversCheck(Board& board);
+  int SEE(Board& board, int* piece_evaluations);
+  int ApproxSEE(Board& board, int* piece_evaluations);
 
  private:
   BoardLocation from_;  // 1
@@ -378,6 +380,11 @@ class Move {
   // Cached check
   // -1 means missing, 0/1 store check values
   int8_t delivers_check_ = -1; // 1
+
+  static constexpr int kSeeNotSet = -9999999;
+
+  // Static exchange value of the move
+  int see_ = kSeeNotSet;
 };
 
 enum GameResult {
@@ -648,6 +655,12 @@ Team GetTeam(PlayerColor color);
 Player GetNextPlayer(const Player& player);
 Player GetPreviousPlayer(const Player& player);
 Player GetPartner(const Player& player);
+
+// Returns the static exchange evaluation of a capture.
+int StaticExchangeEvaluationCapture(
+    int piece_evaluations[6],
+    Board& board,
+    const Move& move);
 
 
 }  // namespace chess
