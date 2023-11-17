@@ -184,6 +184,9 @@ void CommandLine::StartEvaluation() {
           nps = (int) (((float)num_evals) / (duration_ms.count() / 1000.0));
         }
         int score_centipawn = std::get<0>(res.value());
+        if (board->GetTurn().GetTeam() == BLUE_GREEN) {
+          score_centipawn = -score_centipawn;
+        }
         std::string pv = GetPVStr(*player);
 
         std::cout
