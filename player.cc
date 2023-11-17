@@ -293,9 +293,8 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
                 || (tte->bound == UPPER_BOUND && tte->score <= alpha))
              ) {
 
-            if (tte->move.has_value()
-                && !tte->move->IsCapture()) {
-              UpdateQuietStats(ss, tte->move.value());
+            if (tte->move.has_value()) {
+              UpdateStats(ss, thread_state, board, tte->move.value(), depth);
             }
 
             return std::make_tuple(
@@ -651,25 +650,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       pvinfo.SetChild(child_pvinfo);
       pvinfo.SetBestMove(move);
 
-      const auto& from = move.From();
-      const auto& to = move.To();
-      if (move.IsCapture()) {
-        Piece piece = board.GetPiece(move.From());
-        Piece captured = move.GetCapturePiece();
-        thread_state.capture_heuristic[piece.GetPieceType()][piece.GetColor()]
-          [captured.GetPieceType()][captured.GetColor()]
-          [to.GetRow()][to.GetCol()] += (1 << depth);
-      } else {
-        if (options_.enable_history_heuristic) {
-          Piece piece = board.GetPiece(move.From());
-          thread_state.history_heuristic[piece.GetPieceType()][from.GetRow()][from.GetCol()]
-            [to.GetRow()][to.GetCol()] += (1 << depth);
-        }
-        if (options_.enable_counter_move_heuristic) {
-          thread_state.counter_moves[from.GetRow()*14*14*14 + from.GetCol()*14*14
-            + to.GetRow()*14 + to.GetCol()] = move;
-        }
-      }
+      UpdateStats(ss, thread_state, board, move, depth);
 
       break; // cutoff
     }
@@ -942,6 +923,31 @@ AlphaBetaPlayer::QSearch(
   return std::make_tuple(score, best_move);
 }
 
+
+void AlphaBetaPlayer::UpdateStats(
+    Stack* ss, ThreadState& thread_state, const Board& board,
+    const Move& move, int depth) {
+  auto from = move.From();
+  auto to = move.To();
+  if (move.IsCapture()) {
+    Piece piece = board.GetPiece(move.From());
+    Piece captured = move.GetCapturePiece();
+    thread_state.capture_heuristic[piece.GetPieceType()][piece.GetColor()]
+      [captured.GetPieceType()][captured.GetColor()]
+      [to.GetRow()][to.GetCol()] += (1 << depth);
+  } else {
+    if (options_.enable_history_heuristic) {
+      Piece piece = board.GetPiece(move.From());
+      thread_state.history_heuristic[piece.GetPieceType()][from.GetRow()][from.GetCol()]
+        [to.GetRow()][to.GetCol()] += (1 << depth);
+    }
+    if (options_.enable_counter_move_heuristic) {
+      thread_state.counter_moves[from.GetRow()*14*14*14 + from.GetCol()*14*14
+        + to.GetRow()*14 + to.GetCol()] = move;
+    }
+    UpdateQuietStats(ss, move);
+  }
+}
 
 void AlphaBetaPlayer::UpdateQuietStats(Stack* ss, const Move& move) {
   if (options_.enable_killers) {

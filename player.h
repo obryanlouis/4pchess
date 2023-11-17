@@ -227,6 +227,8 @@ class AlphaBetaPlayer {
       int max_depth = 20);
 
   void ResetMobilityScores(ThreadState& thread_state);
+  void UpdateStats(Stack* ss, ThreadState& thread_state, const Board& board,
+                   const Move& move, int depth);
   void UpdateQuietStats(Stack* ss, const Move& move);
   void UpdateMobilityEvaluation(ThreadState& thread_state, Player turn);
   bool HasShield(Board& board, PlayerColor color, const BoardLocation& king_loc);
