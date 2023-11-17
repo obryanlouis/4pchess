@@ -53,9 +53,10 @@ MovePicker::MovePicker(
       int attacker_val = piece_evaluations[piece.GetPieceType()];
       int incr_score = captured_val - attacker_val/100;
       score += incr_score;
-      score += capture_heuristic[piece.GetPieceType()][piece.GetColor()]
+      int history_score = capture_heuristic[piece.GetPieceType()][piece.GetColor()]
         [capture.GetPieceType()][capture.GetColor()]
-        [to.GetRow()][to.GetCol()] / 200;
+        [to.GetRow()][to.GetCol()];
+      score += history_score;
       if (attacker_val <= captured_val) {
         stages_[GOOD_CAPTURE].emplace_back(i, score);
       } else {
