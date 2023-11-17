@@ -18,7 +18,8 @@ MovePicker::MovePicker(
     const std::optional<Move>& pvmove,
     Move* killers,
     int piece_evaluations[6],
-    int history_heuristic[14][14][14][14],
+    int history_heuristic[6][14][14][14][14],
+    int capture_heuristic[6][4][6][4][14][14],
     int piece_move_order_scores[6],
     bool enable_move_order_checks,
     Move* buffer,
@@ -37,6 +38,8 @@ MovePicker::MovePicker(
 
     const auto capture = move.GetCapturePiece();
     const auto piece = board.GetPiece(move.From());
+    const auto& from = move.From();
+    const auto& to = move.To();
 
     int score = piece_move_order_scores[piece.GetPieceType()];
     if (pvmove.has_value() && move == pvmove.value()) {
@@ -50,15 +53,16 @@ MovePicker::MovePicker(
       int attacker_val = piece_evaluations[piece.GetPieceType()];
       int incr_score = captured_val - attacker_val/100;
       score += incr_score;
+      score += capture_heuristic[piece.GetPieceType()][piece.GetColor()]
+        [capture.GetPieceType()][capture.GetColor()]
+        [to.GetRow()][to.GetCol()] / 200;
       if (attacker_val <= captured_val) {
         stages_[GOOD_CAPTURE].emplace_back(i, score);
       } else {
         stages_[BAD_CAPTURE].emplace_back(i, score);
       }
     } else if (include_quiets) {
-      const auto& from = move.From();
-      const auto& to = move.To();
-      score += history_heuristic[from.GetRow()][from.GetCol()][to.GetRow()][to.GetCol()];
+      score += history_heuristic[piece.GetPieceType()][from.GetRow()][from.GetCol()][to.GetRow()][to.GetCol()];
       if (move == counter_moves[from.GetRow()*14*14*14 + from.GetCol()*14*14
           + to.GetRow()*14 + to.GetCol()]) {
         score += 50;

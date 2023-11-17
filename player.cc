@@ -400,6 +400,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
     ss->killers,
     piece_evaluations_,
     thread_state.history_heuristic,
+    thread_state.capture_heuristic,
     piece_move_order_scores_,
     options_.enable_move_order_checks,
     moves,
@@ -650,11 +651,18 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       pvinfo.SetChild(child_pvinfo);
       pvinfo.SetBestMove(move);
 
-      if (!move.IsCapture()) {
-        const auto& from = move.From();
-        const auto& to = move.To();
+      const auto& from = move.From();
+      const auto& to = move.To();
+      if (move.IsCapture()) {
+        Piece piece = board.GetPiece(move.From());
+        Piece captured = move.GetCapturePiece();
+        thread_state.capture_heuristic[piece.GetPieceType()][piece.GetColor()]
+          [captured.GetPieceType()][captured.GetColor()]
+          [to.GetRow()][to.GetCol()] += (1 << depth);
+      } else {
         if (options_.enable_history_heuristic) {
-          thread_state.history_heuristic[from.GetRow()][from.GetCol()]
+          Piece piece = board.GetPiece(move.From());
+          thread_state.history_heuristic[piece.GetPieceType()][from.GetRow()][from.GetCol()]
             [to.GetRow()][to.GetCol()] += (1 << depth);
         }
         if (options_.enable_counter_move_heuristic) {
@@ -800,6 +808,7 @@ AlphaBetaPlayer::QSearch(
     ss->killers,
     piece_evaluations_,
     thread_state.history_heuristic,
+    thread_state.capture_heuristic,
     piece_move_order_scores_,
     options_.enable_move_order_checks,
     moves,
@@ -1153,7 +1162,8 @@ int AlphaBetaPlayer::Evaluate(
 }
 
 void ThreadState::ResetHistoryHeuristic() {
-  std::memset(history_heuristic, 0, (14*14*14*14) * sizeof(int) / sizeof(char));
+  std::memset(history_heuristic, 0, (6*14*14*14*14) * sizeof(int) / sizeof(char));
+  std::memset(capture_heuristic, 0, (6*4*6*4*14*14) * sizeof(int) / sizeof(char));
 }
 
 void AlphaBetaPlayer::ResetMobilityScores(ThreadState& thread_state) {

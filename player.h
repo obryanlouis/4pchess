@@ -119,9 +119,10 @@ class ThreadState {
 
   ~ThreadState();
 
-  // https://www.chessprogramming.org/History_Heuristic
-  // (from_row, from_col, to_row, to_col)
-  int history_heuristic[14][14][14][14];
+  // (piece_type, from_row, from_col, to_row, to_col)
+  int history_heuristic[6][14][14][14][14];
+  // (piece_type, piece_color, capture_piece_type, capture_piece_color, to_row, to_col)
+  int capture_heuristic[6][4][6][4][14][14];
   // https://www.chessprogramming.org/Countermove_Heuristic
   // (from_row, from_col, to_row, to_col)
   Move* counter_moves = nullptr;
