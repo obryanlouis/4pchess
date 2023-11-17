@@ -171,6 +171,44 @@ AlphaBetaPlayer::AlphaBetaPlayer(std::optional<PlayerOptions> options) {
     piece_activation_threshold_[ROOK] = 5;
   }
 
+  if (options_.enable_knight_bonus) {
+    std::memset(knight_to_king_, 0, 14*14*14*14 * sizeof(bool) / sizeof(char));
+    for (int row = 0; row < 14; ++row) {
+      for (int col = 0; col < 14; ++col) {
+        // first move
+        for (int dr : {-2, -1, 1, 2}) {
+          int r1 = row + dr;
+          if (r1 < 0 || r1 > 13) {
+            continue;
+          }
+          int abs_dc = std::abs(dr) == 1 ? 2 : 1;
+          for (int dc : {-abs_dc, abs_dc}) {
+            int c1 = col + dc;
+            if (c1 < 0 || c1 > 13) {
+              continue;
+            }
+
+            // second move
+            for (int dr2 : {-2, -1, 1, 2}) {
+              int r2 = r1 + dr2;
+              if (r2 < 0 || r2 > 13) {
+                continue;
+              }
+              int abs_dc2 = std::abs(dr2) == 1 ? 2 : 1;
+              for (int dc2 : {-abs_dc2, abs_dc2}) {
+                int c2 = c1 + dc2;
+                if (c2 < 0 || c2 > 13) {
+                  continue;
+                }
+                knight_to_king_[row][col][r2][c2] = true;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
   searching_ = new bool[kMaxPly * kSearchHashBufferSize];
 }
 
@@ -332,15 +370,19 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
     board.UndoNullMove();
 
     // if it failed high, skip this move
-    if (value_and_move_or.has_value()
-        && -std::get<0>(value_and_move_or.value()) >= beta) {
-      num_null_moves_pruned_++;
+    if (value_and_move_or.has_value()) {
+      int nmp_score = -std::get<0>(value_and_move_or.value());
+      if (nmp_score >= beta
+          // don't return unproven mate score
+          && nmp_score < kMateValue) {
+        num_null_moves_pruned_++;
 
-      if (options_.enable_transposition_table) {
-        transposition_table_->Save(board.HashKey(), depth, std::nullopt, beta, LOWER_BOUND, is_pv_node);
+        if (options_.enable_transposition_table) {
+          transposition_table_->Save(board.HashKey(), depth, std::nullopt, beta, LOWER_BOUND, is_pv_node);
+        }
+
+        return std::make_tuple(beta, std::nullopt);
       }
-
-      return std::make_tuple(beta, std::nullopt);
     }
   }
 
@@ -542,7 +584,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       value_and_move_or = Search(
           ss+1, NonPV, thread_state, ply + 1, depth - 1 - r + e,
           -alpha-1, -alpha, !maximizing_player, expanded + e,
-          deadline, *child_pvinfo, null_moves, true);
+          deadline, *child_pvinfo, /*null_moves=*/0, true);
       if (value_and_move_or.has_value()) {
         int score = -std::get<0>(value_and_move_or.value());
         if (score > alpha) {  // re-search
@@ -550,7 +592,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
           value_and_move_or = Search(
               ss+1, NonPV, thread_state, ply + 1, depth - 1 + e,
               -beta, -alpha, !maximizing_player, expanded + e,
-              deadline, *child_pvinfo, null_moves, !is_cut_node);
+              deadline, *child_pvinfo, /*null_moves=*/0, !is_cut_node);
         }
       }
 
@@ -563,7 +605,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       value_and_move_or = Search(
           ss+1, NonPV, thread_state, ply + 1, depth - 1 + e - (r > 3),
           -alpha-1, -alpha, !maximizing_player, expanded + e,
-          deadline, *child_pvinfo, null_moves, !is_cut_node);
+          deadline, *child_pvinfo, /*null_moves=*/0, !is_cut_node);
     }
 
     // For PV nodes only, do a full PV search on the first move or after a fail
@@ -582,7 +624,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       value_and_move_or = Search(
           ss+1, PV, thread_state, ply + 1, depth - 1 + e,
           -beta, -alpha, !maximizing_player, expanded + e,
-          deadline, *child_pvinfo, null_moves, false);
+          deadline, *child_pvinfo, /*null_moves=*/0, false);
     }
 
     board.UndoMove();
@@ -938,7 +980,8 @@ int AlphaBetaPlayer::Evaluate(
     // Piece evaluation
     eval = board.PieceEvaluation();
 
-    if (options_.enable_piece_square_table) {
+    if (options_.enable_piece_square_table
+        || options_.enable_knight_bonus) {
       const auto& piece_list = board.GetPieceList();
       for (int color = 0; color < 4; color++) {
         for (const auto& placed_piece : piece_list[color]) {
@@ -947,10 +990,33 @@ int AlphaBetaPlayer::Evaluate(
           int row = loc.GetRow();
           int col = loc.GetCol();
 
-          if (color == RED || color == YELLOW) {
-            eval += piece_square_table_[color][piece_type][row][col];
-          } else {
-            eval -= piece_square_table_[color][piece_type][row][col];
+          if (options_.enable_piece_square_table) {
+            if (color == RED || color == YELLOW) {
+              eval += piece_square_table_[color][piece_type][row][col];
+            } else {
+              eval -= piece_square_table_[color][piece_type][row][col];
+            }
+          }
+
+          // bonus for knights 2 moves away from enemy king
+          if (options_.enable_knight_bonus
+              && piece_type == KNIGHT) {
+            int knight_bonus = 0;
+            for (int i = 0; i < 2; i++) {
+              PlayerColor other_color = static_cast<PlayerColor>(
+                  (color + 2 * i + 1) % 4);
+              auto king_loc = board.GetKingLocation(other_color);
+              int king_row = king_loc.GetRow();
+              int king_col = king_loc.GetCol();
+              if (knight_to_king_[row][col][king_row][king_col]) {
+                knight_bonus += 100;
+              }
+            }
+            if (color == RED || color == YELLOW) {
+              eval += knight_bonus;
+            } else {
+              eval -= knight_bonus;
+            }
           }
         }
       }

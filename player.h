@@ -63,6 +63,7 @@ struct PlayerOptions {
   bool enable_piece_imbalance = true;
   bool enable_lazy_eval = true;
   bool enable_piece_square_table = true;
+  bool enable_knight_bonus = true;
 
   int piece_eval_pawn = 50;
   int piece_eval_knight = 300;
@@ -271,6 +272,7 @@ class AlphaBetaPlayer {
   int piece_square_table_[4][6][14][14];
   // number of moves a piece needs to have to be considered active
   int piece_activation_threshold_[7];
+  bool knight_to_king_[14][14][14][14];
 
   bool* searching_ = nullptr;
 };
