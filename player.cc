@@ -293,10 +293,6 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
                 || (tte->bound == UPPER_BOUND && tte->score <= alpha))
              ) {
 
-            if (tte->move.has_value()) {
-              UpdateStats(ss, thread_state, board, tte->move.value(), depth);
-            }
-
             return std::make_tuple(
                 std::min(beta, std::max(alpha, tte->score)), tte->move);
           }
