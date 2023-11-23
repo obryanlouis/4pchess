@@ -52,7 +52,7 @@ AlphaBetaPlayer::AlphaBetaPlayer(std::optional<PlayerOptions> options) {
   piece_move_order_scores_[QUEEN] = 5;
   piece_move_order_scores_[KING] = 0;
 
-  king_attacker_values_[PAWN] = 0;
+  king_attacker_values_[PAWN] = 25;
   king_attacker_values_[KNIGHT] = 30;
   king_attacker_values_[BISHOP] = 30;
   king_attacker_values_[ROOK] = 40;
@@ -77,15 +77,15 @@ AlphaBetaPlayer::AlphaBetaPlayer(std::optional<PlayerOptions> options) {
   }
 
   king_attack_weight_[0] = 0;
-  king_attack_weight_[1] = 0;
-  king_attack_weight_[2] = 50;
-  king_attack_weight_[3] = 75;
-  king_attack_weight_[4] = 88;
-  king_attack_weight_[5] = 94;
-  king_attack_weight_[6] = 97;
-  king_attack_weight_[7] = 99;
+  king_attack_weight_[1] = 50;
+  king_attack_weight_[2] = 100;
+  king_attack_weight_[3] = 120;
+  king_attack_weight_[4] = 150;
+  king_attack_weight_[5] = 200;
+  king_attack_weight_[6] = 250;
+  king_attack_weight_[7] = 300;
   for (int i = 8; i < 30; i++) {
-    king_attack_weight_[i] = 100;
+    king_attack_weight_[i] = 400;
   }
 
   if (options_.enable_piece_square_table) {
@@ -1106,6 +1106,8 @@ int AlphaBetaPlayer::Evaluate(
 
           if (options_.enable_attacking_king_zone) {
 
+            int num_attacker_colors = 0;
+            int attacker_colors[4] = {0, 0, 0, 0};
             for (int delta_row = -1; delta_row <= 1; ++delta_row) {
               for (int delta_col = -1; delta_col <= 1; ++delta_col) {
                 int row = king_location.GetRow() + delta_row;
@@ -1121,7 +1123,6 @@ int AlphaBetaPlayer::Evaluate(
 
                 if (num_attackers > 0) {
                   int value_of_attacks = 0;
-                  int attacker_colors[4] = {0, 0, 0, 0};
                   for (size_t attacker_id = 0; attacker_id < num_attackers; attacker_id++) {
                     const auto& placed_piece = attackers[attacker_id];
                     const auto& piece = placed_piece.GetPiece();
@@ -1131,20 +1132,23 @@ int AlphaBetaPlayer::Evaluate(
                       attacker_colors[piece.GetColor()]++;
                     }
                   }
-                  int num_attacker_colors = 0;
-                  for (int i = 0; i < 4; i++) {
-                    if (attacker_colors[i] > 0) {
-                      num_attacker_colors++;
-                    }
-                  }
                   int attack_zone = value_of_attacks * king_attack_weight_[num_attackers] / 100;
-                  if (num_attacker_colors > 1) {
-                    attack_zone += 150;
-                  }
                   king_safety -= attack_zone;
                 }
               }
             }
+
+            int total_attacking_pieces = 0;
+            for (int i = 0; i < 4; i++) {
+              if (attacker_colors[i] > 0) {
+                num_attacker_colors++;
+                total_attacking_pieces += attacker_colors[i];
+              }
+            }
+            if (num_attacker_colors > 1) {
+              king_safety -= 150;
+            }
+
           }
 
         }
