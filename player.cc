@@ -438,7 +438,6 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       && move_count >= 4
       && (move.IsCapture() || quiets >= 2)
       && !is_pv_node
-      && move_count > (is_pv_node && ply <= 1)
       && (!is_tt_pv
           || !move.IsCapture()
           || (is_cut_node && (ss-1)->move_count > 1))
