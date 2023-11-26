@@ -48,12 +48,29 @@ def _read_api_token(filepath: str) -> str:
     return f.read().strip()
 
 
+def _standardize_move(move: str) -> str:
+  separator = '-'
+  if 'x' in move:
+    separator = 'x'
+  parts = move.split(separator)
+  for i in range(len(parts)):
+    part = parts[i]
+    m = re.match('^([a-zA-Z]+)', part)
+    if m:
+      letters = m.group(1)
+      if len(letters) > 1:
+        parts[i] = part[len(letters) - 1:]
+  return separator.join(parts)
+
+
 class Pgn4Info:
 
-  def __init__(self, base_time_ms: int, incr_time_ms: int, delay_time_ms: int):
+  def __init__(self, base_time_ms: int, incr_time_ms: int, delay_time_ms: int,
+      last_move: str | None):
     self.base_time_ms = base_time_ms
     self.incr_time_ms = incr_time_ms
     self.delay_time_ms = delay_time_ms
+    self.last_move = last_move
 
   @classmethod
   def FromString(cls, pgn4: str):
@@ -73,7 +90,16 @@ class Pgn4Info:
     base_time_ms = int(base_time_mins * 60 * 1000)
     incr_time_ms = int(incr_time_secs * 1000)
     delay_time_ms = int(delay_time_secs * 1000)
-    return Pgn4Info(base_time_ms, incr_time_ms, delay_time_ms)
+
+    last_move = None
+    lines = pgn4.split('\n')
+    last_line = lines[-1]
+    pattern = r'^\d+\. (?:([\w-]+)\s*(?:{.*?})?\s*(?:\.\.\s*|$))+$'
+    m = re.match(pattern, last_line, re.DOTALL)
+    if m:
+      last_move = _standardize_move(m.group(1))
+
+    return Pgn4Info(base_time_ms, incr_time_ms, delay_time_ms, last_move)
 
 
 class Server:
@@ -187,7 +213,8 @@ class Server:
         move_time_ms = max(move_time_ms, _MIN_MOVE_TIME_MS)
 
 #        print('move_time_ms:', move_time_ms)
-        res = self._uci.get_best_move(move_time_ms, self.display_arrows)
+        res = self._uci.get_best_move(move_time_ms, self.display_arrows,
+            last_move=self._pgn4_info.last_move)
         if res.get('gameover'):
 #          print('game over... (should not get here!)')
           return True
@@ -195,6 +222,8 @@ class Server:
         play_response = self._api.play(res['best_move'])
         self._move_number += 1
 #        print('play response:', play_response)
+
+        self._uci.ponder(fen, res['best_move'])
 
 #        # DEBUG: to work around a chess.com API issue
 #        return True
@@ -213,7 +242,7 @@ class Server:
     if not args.arrows:
       return
     parts = ['clear']
-    for move in pv:
+    for move in pv[:4]:
       parts.append(f'{move}-50')
     request = ','.join(parts)
     if request == self._last_arrow_request:

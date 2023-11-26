@@ -188,6 +188,8 @@ class AlphaBetaPlayer {
       const std::optional<std::chrono::time_point<std::chrono::system_clock>>& deadline,
       PVInfo& pv_info);
 
+  int GetNumLegalMoves(Board& board);
+
   int64_t GetNumEvaluations() { return num_nodes_; }
   int64_t GetNumCacheHits() { return num_cache_hits_; }
   int64_t GetNumNullMovesTried() { return num_null_moves_tried_; }

@@ -242,6 +242,25 @@ void ThreadState::ReleaseMoveBufferPartition() {
   buffer_id_--;
 }
 
+int AlphaBetaPlayer::GetNumLegalMoves(Board& board) {
+  constexpr int kLimit = 300;
+  Move moves[kLimit];
+  Player player = board.GetTurn();
+  bool in_check = board.IsKingInCheck(player);
+  size_t num_moves = board.GetPseudoLegalMoves2(moves, kLimit);
+  int n_legal = 0;
+  for (int i = 0; i < num_moves; i++) {
+    const auto& move = moves[i];
+    board.MakeMove(move);
+    if (!board.IsKingInCheck(player)) { // invalid move
+      n_legal++;
+    }
+    board.UndoMove();
+  }
+
+  return n_legal;
+}
+
 // Alpha-beta search with nega-max framework.
 // https://www.chessprogramming.org/Alpha-Beta
 // Returns (nega-max value, best move) pair.
@@ -472,6 +491,24 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
     }
     if (in_check || partner_checked) {
       r -= 1;
+    }
+
+    const auto from = move.From();
+    const auto to = move.To();
+    Piece piece = board.GetPiece(move.From());
+    int history_score = 0;
+    if (move.IsCapture()) {
+      Piece captured = move.GetCapturePiece();
+      history_score = thread_state.capture_heuristic[piece.GetPieceType()][piece.GetColor()]
+        [captured.GetPieceType()][captured.GetColor()]
+        [to.GetRow()][to.GetCol()];
+    } else {
+      history_score = thread_state.history_heuristic[piece.GetPieceType()][from.GetRow()][from.GetCol()]
+        [to.GetRow()][to.GetCol()];
+    }
+    // additional reduction for moves with bad history
+    if (history_score <= (1 << depth)) {
+      r++;
     }
 
     r = std::max(r, 0);
@@ -1137,11 +1174,9 @@ int AlphaBetaPlayer::Evaluate(
               }
             }
 
-            int total_attacking_pieces = 0;
             for (int i = 0; i < 4; i++) {
               if (attacker_colors[i] > 0) {
                 num_attacker_colors++;
-                total_attacking_pieces += attacker_colors[i];
               }
             }
             if (num_attacker_colors > 1) {

@@ -62,6 +62,8 @@ CommandLine::CommandLine() {
 
 void CommandLine::Run() {
   // Runs on main thread
+  player_ = std::make_shared<AlphaBetaPlayer>(player_options_);
+  ResetBoard();
   while (running_) {
     std::string line;
     std::getline(std::cin, line);
@@ -95,14 +97,6 @@ void CommandLine::StopEvaluation() {
       player_->SetCanceled(false);
     }
   }
-}
-
-void CommandLine::ResetPlayer() {
-  std::lock_guard lock(mutex_);
-  //PlayerOptions options;
-  //options.enable_multithreading = n_threads_ > 1;
-  //options.num_threads = n_threads_;
-  player_ = std::make_shared<AlphaBetaPlayer>(player_options_);
 }
 
 void CommandLine::ResetBoard() {
@@ -273,8 +267,11 @@ void CommandLine::HandleCommand(
               "Hash MB must be non-negative, given: " + option_value);
           return;
         }
-        //hash_table_mb_ = val.value();
-        player_options_.transposition_table_size = val.value() * 1000000 / sizeof(HashTableEntry);
+        int size = val.value() * 1000000 / sizeof(HashTableEntry);
+        if (size != player_options_.transposition_table_size) {
+          player_options_.transposition_table_size = size;
+          player_ = std::make_shared<AlphaBetaPlayer>(player_options_);
+        }
       } else {
         SendInvalidCommandMessage("Can not parse int: " + option_value);
         return;
@@ -302,8 +299,11 @@ void CommandLine::HandleCommand(
       if (n_threads < 0) {
         SendInvalidCommandMessage("Num threads must be positive");
       }
-      player_options_.num_threads = n_threads;
-      player_options_.enable_multithreading = n_threads > 1;
+      if (n_threads != player_options_.num_threads) {
+        player_options_.num_threads = n_threads;
+        player_options_.enable_multithreading = n_threads > 1;
+        player_ = std::make_shared<AlphaBetaPlayer>(player_options_);
+      }
     } else {
       for (const auto name : {
           "piece_eval_pawn",
@@ -327,14 +327,16 @@ void CommandLine::HandleCommand(
       return;
     }
     StopEvaluation();
-    ResetPlayer();
+
+  } else if (command == "get_num_legal_moves") {
+    int n_legal = player_->GetNumLegalMoves(*board_);
+    SendInfoMessage("n_legal " + std::to_string(n_legal));
 
   } else if (command == "register") {
     // ignore
   } else if (command == "ucinewgame") {
     // stop evaluation, if any, and create a new player / board
     StopEvaluation();
-    ResetPlayer();
     ResetBoard();
   } else if (command == "position") {
 
@@ -367,7 +369,6 @@ void CommandLine::HandleCommand(
     if (parts.size() < next_pos + 1) {
       // Invalid, but we'll accept it
       StopEvaluation();
-      ResetPlayer();
       SetBoard(std::move(board));
       return;
     }
@@ -388,16 +389,9 @@ void CommandLine::HandleCommand(
     }
 
     StopEvaluation();
-    ResetPlayer();
     SetBoard(std::move(board));
 
   } else if (command == "go") {
-    if (board_ == nullptr) {
-      // allow "go" without calling "ucinewgame"
-      ResetPlayer();
-      ResetBoard();
-    }
-
     // parse all options and then execute a search
 
     size_t cmd_id = 1;
