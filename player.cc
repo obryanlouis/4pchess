@@ -246,7 +246,6 @@ int AlphaBetaPlayer::GetNumLegalMoves(Board& board) {
   constexpr int kLimit = 300;
   Move moves[kLimit];
   Player player = board.GetTurn();
-  bool in_check = board.IsKingInCheck(player);
   size_t num_moves = board.GetPseudoLegalMoves2(moves, kLimit);
   int n_legal = 0;
   for (int i = 0; i < num_moves; i++) {

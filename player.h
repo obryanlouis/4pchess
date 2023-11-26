@@ -84,9 +84,6 @@ struct PlayerOptions {
   // transposition table
   size_t transposition_table_size = kTranspositionTableSize;
   std::optional<int> max_search_depth;
-
-  // generic test change
-  bool test = false;
 };
 
 struct Stack {
