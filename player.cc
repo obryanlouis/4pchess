@@ -344,13 +344,12 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
 
   bool in_check = board.IsKingInCheck(player);
 
-  // futility pruning
+  // reverse futility pruning
   if (options_.enable_futility_pruning
       && !in_check
       && !is_pv_node
       && !is_tt_pv
-      && depth <= 8
-      && eval >= beta
+      && depth <= 1
       && eval - 150 * depth >= beta
       && eval < kMateValue) {
     return std::make_tuple(beta, std::nullopt);
@@ -518,7 +517,10 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       lmr_depth = std::max(new_depth - r, 0);
     }
 
+    // futility pruning
+    // TODO: investigate whether "deep" futility pruning should be allowed.
     if (!is_root_node
+        && !is_pv_node
         && alpha > -kMateValue
         && lmr
         && move.IsCapture()
