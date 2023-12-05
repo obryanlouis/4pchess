@@ -431,17 +431,17 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
   bool processing_deferred = false;
 
   while (true) {
-    Move* move_ptr = nullptr;
-    if (!deferred_moves.empty() && deferred_index < deferred_moves.size()) {
-      move_ptr = deferred_moves[deferred_index++];
-      processing_deferred = true;
-    } else {
-      move_ptr = move_picker.GetNextMove();
-      processing_deferred = false;
-      if (move_ptr == nullptr) {
+    Move* move_ptr = move_picker.GetNextMove();
+    processing_deferred = false;
+    if (move_ptr == nullptr) {
+      if (!deferred_moves.empty() && deferred_index < deferred_moves.size()) {
+        move_ptr = deferred_moves[deferred_index++];
+        processing_deferred = true;
+      } else {
         break;
       }
     }
+
     Move& move = *move_ptr;
 
     std::optional<std::tuple<int, std::optional<Move>>> value_and_move_or;
@@ -536,8 +536,10 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
 
     board.MakeMove(move);
     int move_hash = MoveHash(move);
+
     // hash value to promote threads searching on different branches
-    int search_hash = ply*kSearchHashBufferSize + move_hash;
+    int search_hash = (ply*kSearchHashBufferSize + move_hash)
+      % (kMaxPly * kSearchHashBufferSize);
     bool maybe_defer = options_.enable_multithreading
       && is_pv_node
       && !processing_deferred;
@@ -557,7 +559,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
 
     if (board.CheckWasLastMoveKingCapture() != IN_PROGRESS) {
       board.UndoMove();
-      if (maybe_defer) {
+      if (options_.enable_multithreading) {
         searching_[search_hash] = false;
       }
 
@@ -570,7 +572,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
 
     if (board.IsKingInCheck(player)) { // invalid move
       board.UndoMove();
-      if (maybe_defer) {
+      if (options_.enable_multithreading) {
         searching_[search_hash] = false;
       }
 
@@ -661,7 +663,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
     }
 
     board.UndoMove();
-    if (options_.enable_multithreading && !processing_deferred) {
+    if (options_.enable_multithreading) {
       searching_[search_hash] = false;
     }
 

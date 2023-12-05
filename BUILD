@@ -133,3 +133,16 @@ cc_test(
     ],
 )
 
+cc_binary(
+    name = "depth_test",
+    srcs = ["depth_test.cc"],
+    deps = [
+        ":board",
+        ":player",
+        ":utils",
+        "@com_google_absl//absl/flags:flag",
+        "@com_google_absl//absl/flags:parse",
+    ],
+)
+
+
