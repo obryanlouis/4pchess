@@ -372,7 +372,6 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
     // try the null move with possibly reduced depth
     PVInfo null_pvinfo;
     int r = std::min(depth / 3 + 2, depth);
-    //int r = depth / 4 + 2 + std::min((eval - beta)/150, 6);
 
     auto value_and_move_or = Search(
         ss+1, NonPV, thread_state, ply + 1, depth - r,
@@ -452,14 +451,10 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
     bool lmr =
       options_.enable_late_move_reduction
       && depth > 1
-      && move_count >= 4
-      && (move.IsCapture() || quiets >= 2)
-      && !is_pv_node
+      && move_count > 1 + is_root_node
       && (!is_tt_pv
           || !move.IsCapture()
           || (is_cut_node && (ss-1)->move_count > 1))
-      && (!move.IsStandardCapture() || (
-            !delivers_check && move.ApproxSEE(board, piece_evaluations_) < 0))
          ;
 
     bool quiet = !in_check && !move.IsCapture() && !delivers_check
@@ -476,40 +471,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       continue;
     }
 
-    int r = 2 + depth / 3 + std::min(move_count / 10, 1);
-
-    if (delivers_check) {
-      r -= 1;
-      if (move.IsCapture()) {
-        r -= 1;
-      }
-    }
-    if (move.IsCapture()) {
-      r -= 1;
-    }
-    if (in_check || partner_checked) {
-      r -= 1;
-    }
-
-    const auto from = move.From();
-    const auto to = move.To();
-    Piece piece = board.GetPiece(move.From());
-    int history_score = 0;
-    if (move.IsCapture()) {
-      Piece captured = move.GetCapturePiece();
-      history_score = thread_state.capture_heuristic[piece.GetPieceType()][piece.GetColor()]
-        [captured.GetPieceType()][captured.GetColor()]
-        [to.GetRow()][to.GetCol()];
-    } else {
-      history_score = thread_state.history_heuristic[piece.GetPieceType()][from.GetRow()][from.GetCol()]
-        [to.GetRow()][to.GetCol()];
-    }
-    // additional reduction for moves with bad history
-    if (history_score <= (1 << depth)) {
-      r++;
-    }
-
-    r = std::max(r, 0);
+    int r = 1;
 
     int new_depth = depth - 1;
     int lmr_depth = new_depth;
@@ -620,13 +582,13 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
           ss+1, NonPV, thread_state, ply + 1, depth - 1 - r + e,
           -alpha-1, -alpha, !maximizing_player, expanded + e,
           deadline, *child_pvinfo, /*null_moves=*/0, true);
-      if (value_and_move_or.has_value()) {
+      if (value_and_move_or.has_value() && r > 0) {
         int score = -std::get<0>(value_and_move_or.value());
         if (score > alpha) {  // re-search
           num_lmr_researches_++;
           value_and_move_or = Search(
               ss+1, NonPV, thread_state, ply + 1, depth - 1 + e,
-              -beta, -alpha, !maximizing_player, expanded + e,
+              -alpha-1, -alpha, !maximizing_player, expanded + e,
               deadline, *child_pvinfo, /*null_moves=*/0, !is_cut_node);
         }
       }
