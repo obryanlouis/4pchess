@@ -1,12 +1,13 @@
 """Server for playing on chess.com."""
 
-import argparse
-import re
-import json
 import api
+import argparse
+import json
+import re
+import requests
+import tablebase
 import time
 import uci_wrapper
-import requests
 
 parser = argparse.ArgumentParser(
     prog='Server',
@@ -39,7 +40,6 @@ else:
 _MAX_MOVE_MS = 30000
 _MIN_REMAINING_MOVE_MS = 30000
 _MIN_MOVE_TIME_MS = 1000
-_DEBUG = True
 
 
 def _read_api_token(filepath: str) -> str:
@@ -77,7 +77,6 @@ class Pgn4Info:
     m = re.search('TimeControl "(.*?)\\+(.*?)"', pgn4)
     if not m:
       return None
-#      raise ValueError(f'Could not parse time control from pgn4: {pgn4!r}')
     base_time_mins = float(m.group(1))
     extra_time_secs = m.group(2)
     delay_time_secs = 0
@@ -116,8 +115,6 @@ class Server:
     for content in response.iter_content(chunk_size=None):
       content = content.decode('utf-8')
       if not content:
-#        if _DEBUG:
-#          return
         continue
       for part in content.splitlines():
         part = part.strip()
@@ -126,26 +123,19 @@ class Server:
         json_response = None
         try:
           json_response = json.loads(part.strip())
-#          print('json response:', json_response)
         except:
-#          print('could not parse json response:', part)
           pass
         if json_response is not None:
           gameover = self._handle_stream_json(json_response)
           if gameover:
-#            print('end streaming response after game end...')
-#            self._api.chat('Good game')
             self._move_number = 1
             return
-#      if _DEBUG:
-#        return
 
   def _handle_stream_json(self, json_response):
     if 'pgn4' in json_response:
       pgn4_info = Pgn4Info.FromString(json_response['pgn4'])
       if pgn4_info is not None:
         self._pgn4_info = pgn4_info
-#      self._pgn4_info = Pgn4Info.FromString(json_response['pgn4'])
 
     info = json_response.get('info')
     if info:
@@ -153,12 +143,9 @@ class Server:
       if 'game starting' in info:
         return False
       elif 'no game found' in info:
-#        print('no game found...')
         return False
       elif info == "it's not your turn":
         return False
-#        # DEBUG: to work around a chess.com API issue
-#        return True
       elif info == "it's your turn":
         if 'fen4' in json_response:
           fen = json_response['fen4']
@@ -187,52 +174,45 @@ class Server:
           # the response an FEN string?
           pass
 
-        self._uci.set_position(fen)
+        move = tablebase.FEN_TO_BEST_MOVE.get(fen)
+        if move is None:
+          self._uci.set_position(fen)
 
-        # move number of the last player's move, if any
-        last_move_num = json_response.get('move', {}).get('atMove', 0)
-        max_move_ms = _MAX_MOVE_MS
+          # move number of the last player's move, if any
+          last_move_num = json_response.get('move', {}).get('atMove', 0)
+          max_move_ms = _MAX_MOVE_MS
 
-#        # DEBUG: to work around a chess.com API issue
-        if self._move_number <= 2:
-          max_move_ms = 5000
+          if self._move_number <= 2:
+            max_move_ms = 5000
 
-        clock_ms = float(json_response['clock'])
-        assert self._pgn4_info is not None
-        incr_ms = self._pgn4_info.incr_time_ms
-        buffer_ms = 1000
-        if incr_ms <= 1000:
-          buffer_ms = 250
+          clock_ms = float(json_response['clock'])
+          assert self._pgn4_info is not None
+          incr_ms = self._pgn4_info.incr_time_ms
+          buffer_ms = 1000
+          if incr_ms <= 1000:
+            buffer_ms = 250
 
-        move_time_ms = self._pgn4_info.delay_time_ms + incr_ms - buffer_ms
-        min_remaining_ms = _MIN_REMAINING_MOVE_MS
-        if clock_ms > min_remaining_ms:
-          move_time_ms += (clock_ms - min_remaining_ms) / 20
+          move_time_ms = self._pgn4_info.delay_time_ms + incr_ms - buffer_ms
+          min_remaining_ms = _MIN_REMAINING_MOVE_MS
+          if clock_ms > min_remaining_ms:
+            move_time_ms += (clock_ms - min_remaining_ms) / 20
 
-        move_time_ms = min(move_time_ms, max_move_ms)
-        move_time_ms = max(move_time_ms, _MIN_MOVE_TIME_MS)
+          move_time_ms = min(move_time_ms, max_move_ms)
+          move_time_ms = max(move_time_ms, _MIN_MOVE_TIME_MS)
 
-#        print('move_time_ms:', move_time_ms)
-        res = self._uci.get_best_move(move_time_ms, self.display_arrows,
-            last_move=self._pgn4_info.last_move)
-        if res.get('gameover'):
-#          print('game over... (should not get here!)')
-          return True
-#        print('send move:', res['best_move'])
-        play_response = self._api.play(res['best_move'])
+          res = self._uci.get_best_move(move_time_ms, self.display_arrows,
+              last_move=self._pgn4_info.last_move)
+          if res.get('gameover'):
+            return True
+          move = res['best_move']
+        play_response = self._api.play(move)
         self._move_number += 1
-#        print('play response:', play_response)
 
-        self._uci.ponder(fen, res['best_move'])
-
-#        # DEBUG: to work around a chess.com API issue
-#        return True
+        self._uci.ponder(fen, move)
 
       else:
-#        print(f'unrecognized info: {info!r}...')
         return False
     else:
-#      print('ignore json response (no info)')
       return False
 
   def clear_arrows(self):
@@ -249,14 +229,12 @@ class Server:
       return
     self._last_arrow_request = request
     response = self._api.arrow(request)
-#    print('arrow response:', response)
 
   def run(self):
 
-    timeout = .5 if _DEBUG else None
+    timeout = .5
     while True:
       # HTTPResponse
-#      print('new stream request')
       try:
         response = self._api.stream(timeout)
         self._read_streaming_response(response)

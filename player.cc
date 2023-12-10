@@ -471,7 +471,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       continue;
     }
 
-    int r = 1;
+    int r = 1 + std::max(0,(depth-5)/5);
 
     int new_depth = depth - 1;
     int lmr_depth = new_depth;
