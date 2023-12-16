@@ -32,4 +32,5 @@ games
 models
 nnue
 cli
+MODULE.bazel*
 

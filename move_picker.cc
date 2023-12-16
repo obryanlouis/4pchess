@@ -42,7 +42,7 @@ MovePicker::MovePicker(
     const auto& to = move.To();
 
     int score = piece_move_order_scores[piece.GetPieceType()];
-    if (pvmove.has_value() && move == pvmove.value()) {
+    if (pvmove.has_value() && move == *pvmove) {
       stages_[PV_MOVE].emplace_back(i, score);
     } else if (killers != nullptr
                && (killers[0] == move || killers[1] == move)

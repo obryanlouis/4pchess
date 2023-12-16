@@ -175,7 +175,7 @@ void Board::GetPawnMoves2(
         } else if (n_turns < 4) {
           const auto& enp_move = enp_.enp_moves[other_piece.GetColor()];
           if (enp_move.has_value()) {
-            other_player_move = &enp_move.value();
+            other_player_move = &*enp_move;
           }
         }
 
@@ -1212,7 +1212,7 @@ Board::Board(
   for (int color = 0; color < 4; color++) {
     castling_rights_[color] = CastlingRights(false, false);
     if (castling_rights.has_value()) {
-      auto& cr = castling_rights.value();
+      auto& cr = *castling_rights;
       Player pl(static_cast<PlayerColor>(color));
       auto it = cr.find(pl);
       if (it != cr.end()) {
@@ -1221,7 +1221,7 @@ Board::Board(
     }
   }
   if (enp.has_value()) {
-    enp_ = std::move(enp.value());
+    enp_ = std::move(*enp);
   }
   move_buffer_.reserve(1000);
 

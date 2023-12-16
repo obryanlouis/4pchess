@@ -35,7 +35,7 @@ int MoveHash(const Move& move) {
 
 AlphaBetaPlayer::AlphaBetaPlayer(std::optional<PlayerOptions> options) {
   if (options.has_value()) {
-    options_ = options.value();
+    options_ = *options;
   }
 
   piece_evaluations_[PAWN] = options_.piece_eval_pawn;
@@ -285,7 +285,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
   depth = std::max(depth, 0);
   if (canceled_
       || (deadline.has_value()
-        && std::chrono::system_clock::now() >= deadline.value())) {
+        && std::chrono::system_clock::now() >= *deadline)) {
     return std::nullopt;
   }
   num_nodes_++;
@@ -382,7 +382,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
 
     // if it failed high, skip this move
     if (value_and_move_or.has_value()) {
-      int nmp_score = -std::get<0>(value_and_move_or.value());
+      int nmp_score = -std::get<0>(*value_and_move_or);
       if (nmp_score >= beta
           // don't return unproven mate score
           && nmp_score < kMateValue) {
@@ -553,7 +553,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       UpdateMobilityEvaluation(thread_state, player);
     }
 
-    bool is_pv_move = pv_move.has_value() && pv_move.value() == move;
+    bool is_pv_move = pv_move.has_value() && *pv_move == move;
 
     std::shared_ptr<PVInfo> child_pvinfo;
     if (is_pv_move && pvinfo.GetChild() != nullptr) {
@@ -583,7 +583,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
           -alpha-1, -alpha, !maximizing_player, expanded + e,
           deadline, *child_pvinfo, /*null_moves=*/0, true);
       if (value_and_move_or.has_value() && r > 0) {
-        int score = -std::get<0>(value_and_move_or.value());
+        int score = -std::get<0>(*value_and_move_or);
         if (score > alpha) {  // re-search
           num_lmr_researches_++;
           value_and_move_or = Search(
@@ -612,9 +612,9 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       is_pv_node
       && (move_count == 1
           || (value_and_move_or.has_value()
-              && -std::get<0>(value_and_move_or.value()) > alpha
+              && -std::get<0>(*value_and_move_or) > alpha
               && (is_root_node
-                  || -std::get<0>(value_and_move_or.value()) < beta)
+                  || -std::get<0>(*value_and_move_or) < beta)
               ));
 
     if (full_search) {
@@ -639,7 +639,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       thread_state.ReleaseMoveBufferPartition();
       return std::nullopt; // timeout
     }
-    int score = -std::get<0>(value_and_move_or.value());
+    int score = -std::get<0>(*value_and_move_or);
 
     if (score >= beta) {
       alpha = beta;
@@ -712,7 +712,7 @@ AlphaBetaPlayer::QSearch(
   Board& board = thread_state.GetBoard();
   if (canceled_
       || (deadline.has_value()
-        && std::chrono::system_clock::now() >= deadline.value())) {
+        && std::chrono::system_clock::now() >= *deadline)) {
     return std::nullopt;
   }
   if (depth < 0) {
@@ -838,7 +838,7 @@ AlphaBetaPlayer::QSearch(
 
     move_count++;
 
-    bool is_pv_move = pv_move.has_value() && pv_move.value() == move;
+    bool is_pv_move = pv_move.has_value() && *pv_move == move;
 
     std::shared_ptr<PVInfo> child_pvinfo;
     if (is_pv_move && pv_info.GetChild() != nullptr) {
@@ -879,7 +879,7 @@ AlphaBetaPlayer::QSearch(
       thread_state.ReleaseMoveBufferPartition();
       return std::nullopt; // timeout
     }
-    int score = -std::get<0>(value_and_move_or.value());
+    int score = -std::get<0>(*value_and_move_or);
 
     if (!best_move.has_value()) {
       best_move = move;
@@ -1207,11 +1207,11 @@ AlphaBetaPlayer::MakeMove(
   std::optional<std::chrono::time_point<std::chrono::system_clock>> deadline;
   auto start = std::chrono::system_clock::now();
   if (time_limit.has_value()) {
-    deadline = start + time_limit.value();
+    deadline = start + *time_limit;
   }
 
   if (options_.max_search_depth.has_value()) {
-    max_depth = std::min(max_depth, options_.max_search_depth.value());
+    max_depth = std::min(max_depth, *options_.max_search_depth);
   }
 
   int num_threads = 1;
@@ -1295,7 +1295,7 @@ AlphaBetaPlayer::MakeMoveSingleThread(
         if (!move_and_value.has_value()) { // Hit deadline
           break;
         }
-        int evaluation = std::get<0>(move_and_value.value());
+        int evaluation = std::get<0>(*move_and_value);
         if (asp_nobs_ == 0) {
           average_root_eval_ = evaluation;
         } else {
@@ -1334,7 +1334,7 @@ AlphaBetaPlayer::MakeMoveSingleThread(
       res = move_and_value;
       searched_depth = next_depth;
       next_depth++;
-      int evaluation = std::get<0>(move_and_value.value());
+      int evaluation = std::get<0>(*move_and_value);
       if (std::abs(evaluation) == kMateValue) {
         break;  // Proven win/loss
       }
@@ -1355,7 +1355,7 @@ AlphaBetaPlayer::MakeMoveSingleThread(
       res = move_and_value;
       searched_depth = next_depth;
       next_depth++;
-      int evaluation = std::get<0>(move_and_value.value());
+      int evaluation = std::get<0>(*move_and_value);
       if (std::abs(evaluation) == kMateValue) {
         break;  // Proven win/loss
       }
@@ -1364,11 +1364,11 @@ AlphaBetaPlayer::MakeMoveSingleThread(
   }
 
   if (res.has_value()) {
-    int eval = std::get<0>(res.value());
+    int eval = std::get<0>(*res);
     if (!maximizing_player) {
       eval = -eval;
     }
-    return std::make_tuple(eval, std::get<1>(res.value()), searched_depth);
+    return std::make_tuple(eval, std::get<1>(*res), searched_depth);
   }
 
   return std::nullopt;
@@ -1493,7 +1493,7 @@ bool AlphaBetaPlayer::HasShield(
 std::shared_ptr<PVInfo> PVInfo::Copy() const {
   std::shared_ptr<PVInfo> copy = std::make_shared<PVInfo>();
   if (best_move_.has_value()) {
-    copy->SetBestMove(best_move_.value());
+    copy->SetBestMove(*best_move_);
   }
   std::shared_ptr<PVInfo> child = child_;
   if (child != nullptr) {

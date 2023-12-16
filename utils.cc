@@ -168,8 +168,8 @@ std::shared_ptr<Board> ParseBoardFromFEN(const std::string& fen) {
   std::unordered_map<Player, CastlingRights> castling_rights;
   for (int player_color = 0; player_color < 4; player_color++) {
     Player pl(static_cast<PlayerColor>(player_color));
-    castling_rights[pl] = CastlingRights(kingside.value()[player_color],
-                                         queenside.value()[player_color]);
+    castling_rights[pl] = CastlingRights((*kingside)[player_color],
+                                         (*queenside)[player_color]);
   }
 
   // Parse enpassant
@@ -189,7 +189,7 @@ std::shared_ptr<Board> ParseBoardFromFEN(const std::string& fen) {
     for (int i = 0; i < 4; i++) {
       auto enp_location = ParseEnpLocation(parts[i]);
       if (enp_location.has_value()) {
-        BoardLocation& to = enp_location.value();
+        BoardLocation& to = *enp_location;
         int from_row = to.GetRow();
         int from_col = to.GetCol();
         switch (static_cast<PlayerColor>(i)) {
@@ -290,10 +290,10 @@ std::shared_ptr<Board> ParseBoardFromFEN(const std::string& fen) {
       } else {
         // Parse empty spaces
         std::optional<int> num_empty = ParseInt(col_str);
-        if (!num_empty.has_value() || num_empty.value() <= 0) {
+        if (!num_empty.has_value() || *num_empty <= 0) {
           return nullptr;  // invalid format
         }
-        col += num_empty.value();
+        col += *num_empty;
       }
 
     }
@@ -393,18 +393,18 @@ std::optional<Move> ParseMove(Board& board, const std::string& move_str) {
   if (!from.has_value()) {
     return std::nullopt;
   }
-  auto to = ParseLocation(move_str, std::get<0>(from.value()));
+  auto to = ParseLocation(move_str, std::get<0>(*from));
   if (!to.has_value()) {
     return std::nullopt;
   }
-  auto promotion = ParsePromotion(move_str, std::get<0>(to.value()));
+  auto promotion = ParsePromotion(move_str, std::get<0>(*to));
   if (!promotion.has_value()) {
     return std::nullopt;
   }
 
-  BoardLocation from_loc = std::get<1>(from.value());
-  BoardLocation to_loc = std::get<1>(to.value());
-  PieceType promotion_piece_type = std::get<1>(promotion.value());
+  BoardLocation from_loc = std::get<1>(*from);
+  BoardLocation to_loc = std::get<1>(*to);
+  PieceType promotion_piece_type = std::get<1>(*promotion);
 
   Move moves[300];
   size_t num_moves = board.GetPseudoLegalMoves2(moves, 300);

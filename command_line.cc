@@ -153,19 +153,19 @@ void CommandLine::StartEvaluation() {
 
     std::optional<time_point<system_clock>> deadline;
     if (options.movetime.has_value()) {
-      deadline = start + milliseconds(options.movetime.value());
+      deadline = start + milliseconds(*options.movetime);
     }
     std::optional<milliseconds> time_limit;
 
     while (!player->IsCanceled()
-           && (!options.depth.has_value() || depth <= options.depth.value())
+           && (!options.depth.has_value() || depth <= *options.depth)
            && (!deadline.has_value()
-               || system_clock::now() < deadline.value())
+               || system_clock::now() < *deadline)
            // sanity check: past depth 100 won't help
            && depth < 100) {
       if (deadline.has_value()) {
         time_limit = duration_cast<milliseconds>(
-            deadline.value() - system_clock::now());
+            *deadline - system_clock::now());
       }
       auto res = player->MakeMove(*board, time_limit, depth);
 
@@ -177,7 +177,7 @@ void CommandLine::StartEvaluation() {
         if (duration_ms.count() > 0) {
           nps = (int) (((float)num_evals) / (duration_ms.count() / 1000.0));
         }
-        int score_centipawn = std::get<0>(res.value());
+        int score_centipawn = std::get<0>(*res);
         if (board->GetTurn().GetTeam() == BLUE_GREEN) {
           score_centipawn = -score_centipawn;
         }
@@ -191,11 +191,11 @@ void CommandLine::StartEvaluation() {
           << " pv " << pv
           << " score " << score_centipawn;
         if (nps.has_value()) {
-          std::cout << " nps " << nps.value();
+          std::cout << " nps " << *nps;
         }
         std::cout << std::endl;
 
-        best_move = std::get<1>(res.value());
+        best_move = std::get<1>(*res);
         if (std::abs(score_centipawn) == kMateValue) {
           break;
         }
@@ -262,12 +262,12 @@ void CommandLine::HandleCommand(
     if (option_name == "hash") {
       auto val = ParseInt(option_value);
       if (val.has_value()) {
-        if (val.value() < 0) {
+        if (*val < 0) {
           SendInvalidCommandMessage(
               "Hash MB must be non-negative, given: " + option_value);
           return;
         }
-        int size = val.value() * 1000000 / sizeof(HashTableEntry);
+        int size = *val * 1000000 / sizeof(HashTableEntry);
         if (size != player_options_.transposition_table_size) {
           player_options_.transposition_table_size = size;
           player_ = std::make_shared<AlphaBetaPlayer>(player_options_);
@@ -385,7 +385,7 @@ void CommandLine::HandleCommand(
         SendInfoMessage("Invalid move '" + move_str + "'");
         return;
       }
-      board->MakeMove(move_or.value());
+      board->MakeMove(*move_or);
     }
 
     StopEvaluation();
@@ -437,7 +437,7 @@ void CommandLine::HandleCommand(
         while (move_id < parts.size()) {
           auto move = ParseMove(*board_, parts[move_id]);
           if (move.has_value()) {
-            options.search_moves.push_back(std::move(move.value()));
+            options.search_moves.push_back(std::move(*move));
             move_id++;
           } else {
             break;

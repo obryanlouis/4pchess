@@ -22,14 +22,14 @@ To build, you have a couple of options:
 # Option 1 (bazel):
 bazel build -c opt cli
 
-# Option 2 (g++):
-# Check the 'sh' file if you aren't on Unix
-./gpp_build.sh
+# Option 2 (Makefile):
+make cli
 ```
 
 After building, run the program:
 ```
-bazel-bin/cli
+bazel-bin/cli  # for bazel
+# or just `cli` for make
 ```
 
 Then, analyze a position as below.
