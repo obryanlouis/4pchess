@@ -387,7 +387,11 @@ std::optional<std::tuple<size_t, PieceType>> ParsePromotion(
 
 }  // namespace
 
-std::optional<Move> ParseMove(Board& board, const std::string& move_str) {
+std::optional<Move> ParseMove(Board& board, const std::string& move_str_ref) {
+  std::string move_str = move_str_ref;
+  if (!move_str.empty() && move_str[move_str.size() - 1] == '+') {
+    move_str = move_str.substr(0, move_str.size() - 1);
+  }
   // Expected move string format: <letter-col><number-row>
   auto from = ParseLocation(move_str, 0);
   if (!from.has_value()) {

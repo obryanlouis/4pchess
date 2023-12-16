@@ -53,7 +53,7 @@ class UciWrapper:
 
   def create_process(self, num_threads):
     self._process = subprocess.Popen(
-        os.path.join(os.getcwd(), 'bazel-bin/cli'),
+        os.path.join(os.getcwd(), 'cli'),
         universal_newlines=True,
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
