@@ -23,8 +23,9 @@ def get_move_response(process, response, pv_callback):
     if 'Game completed' in line:
       response['gameover'] = True
     if ' pv ' in line:
-      m = re.search('pv (.*?) score', line)
+      m = re.search(r'pv (.*?) score ([-\d]+)', line)
       pv = m.group(1).split()
+      score = m.group(2)
       depth = int(re.search('depth (\d+)', line).group(1))
       movetime = int(re.search('time (\d+)', line).group(1))
       # Avoids calling the callback too frequently
@@ -33,6 +34,7 @@ def get_move_response(process, response, pv_callback):
         pv_callback(pv)
       response['best_move'] = pv[0]
       response['pv'] = pv
+      response['score'] = int(score)
     if 'bestmove' in line:
       m = re.search('bestmove (.*)', line)
       response['best_move'] = m.group(1)

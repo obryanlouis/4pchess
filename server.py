@@ -110,6 +110,7 @@ class Server:
     self._pgn4_info = None
     self._last_arrow_request = None
     self._move_number = 1
+    self._gameoverchat = False
 
   def _read_streaming_response(self, response):
     for content in response.iter_content(chunk_size=None):
@@ -174,7 +175,11 @@ class Server:
           # the response an FEN string?
           pass
 
+        if self._move_number <= 2:
+          self._gameoverchat = False
+
         move = tablebase.FEN_TO_BEST_MOVE.get(fen)
+        score = None
         if move is None:
           self._uci.set_position(fen)
 
@@ -205,6 +210,11 @@ class Server:
           if res.get('gameover'):
             return True
           move = res['best_move']
+          score = res['score']
+        if score is not None and score >= 100000000:
+          if not self._gameoverchat:
+            self._gameoverchat = True
+            self._api.chat('gg')
         play_response = self._api.play(move)
         self._move_number += 1
 
