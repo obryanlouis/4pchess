@@ -301,6 +301,7 @@ class Move {
 
   const BoardLocation& From() const { return from_; }
   const BoardLocation& To() const { return to_; }
+  bool Present() const { return from_.Present() && to_.Present(); }
   Piece GetStandardCapture() const {
     return standard_capture_;
   }

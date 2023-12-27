@@ -473,6 +473,10 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
 
     int r = 1 + std::max(0,(depth-5)/5);
 
+    if (quiet) {
+      r++;
+    }
+
     int new_depth = depth - 1;
     int lmr_depth = new_depth;
     if (lmr) {
@@ -992,6 +996,8 @@ int AlphaBetaPlayer::Evaluate(
     // Piece evaluation
     eval = board.PieceEvaluation();
 
+    int n_queen_ry = 0;
+    int n_queen_bg = 0;
     if (options_.enable_piece_square_table
         || options_.enable_knight_bonus) {
       const auto& piece_list = board.GetPieceList();
@@ -1001,6 +1007,14 @@ int AlphaBetaPlayer::Evaluate(
           const auto& loc = placed_piece.GetLocation();
           int row = loc.GetRow();
           int col = loc.GetCol();
+
+          if (piece_type == QUEEN) {
+            if (color == RED || color == YELLOW) {
+              n_queen_ry++;
+            } else {
+              n_queen_bg++;
+            }
+          }
 
           if (options_.enable_piece_square_table) {
             if (color == RED || color == YELLOW) {
@@ -1091,17 +1105,23 @@ int AlphaBetaPlayer::Evaluate(
         const auto king_location = board.GetKingLocation(pl_cl);
         if (king_location.Present()) {
 
-          if (options_.enable_pawn_shield) {
+          bool opponent_has_queen =
+            ((color == RED || color == YELLOW) && n_queen_bg > 0)
+            || ((color == BLUE || color == GREEN) && n_queen_ry > 0);
+          int safety = 0;
+
+          if (options_.enable_pawn_shield
+              && opponent_has_queen) {
             bool shield = HasShield(board, pl_cl, king_location);
             bool on_back_rank = OnBackRank(king_location);
             if (!shield) {
-              king_safety -= 75;
+              safety -= 75;
             }
             if (!on_back_rank) {
-              king_safety -= 50;
+              safety -= 50;
             }
             if (!shield && !on_back_rank) {
-              king_safety -= 50;
+              safety -= 50;
             }
           }
 
@@ -1134,7 +1154,7 @@ int AlphaBetaPlayer::Evaluate(
                     }
                   }
                   int attack_zone = value_of_attacks * king_attack_weight_[num_attackers] / 100;
-                  king_safety -= attack_zone;
+                  safety -= attack_zone;
                 }
               }
             }
@@ -1145,9 +1165,14 @@ int AlphaBetaPlayer::Evaluate(
               }
             }
             if (num_attacker_colors > 1) {
-              king_safety -= 150;
+              safety -= 150;
             }
 
+            if (!opponent_has_queen) {
+              safety /= 2;
+            }
+
+            king_safety += safety;
           }
 
         }
@@ -1423,8 +1448,36 @@ void AlphaBetaPlayer::UpdateMobilityEvaluation(
     for (size_t move_id = 0; move_id < num_moves; move_id++) {
       const auto& move = moves[move_id];
       const auto& from = move.From();
+      const auto& to = move.To();
       const auto& piece = board.GetPiece(from);
       PieceType piece_type = piece.GetPieceType();
+
+      // don't count back rank squares in mobility / activation
+      switch (piece.GetColor()) {
+      case RED:
+        if (to.GetRow() >= 12) {
+          continue;
+        }
+        break;
+      case YELLOW:
+        if (to.GetRow() <= 1) {
+          continue;
+        }
+        break;
+      case BLUE:
+        if (to.GetCol() <= 1) {
+          continue;
+        }
+        break;
+      case GREEN:
+        if (to.GetCol() >= 12) {
+          continue;
+        }
+        break;
+      default:
+        break;
+      }
+
       if (piece_type == QUEEN || piece_type == ROOK || piece_type == BISHOP
           || piece_type == KNIGHT) {
         if (from != last_loc) {

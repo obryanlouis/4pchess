@@ -39,7 +39,7 @@ else:
 
 _MAX_MOVE_MS = 30000
 _MIN_REMAINING_MOVE_MS = 30000
-_MIN_MOVE_TIME_MS = 1000
+_MIN_MOVE_TIME_MS = 100
 
 
 def _read_api_token(filepath: str) -> str:
