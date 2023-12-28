@@ -83,12 +83,28 @@ bazel test -c opt speed_test --test_output=all
 
 ### A/B tests for playing strength
 
-Take a look at `strength_test.cc` and make updates to the config for player
-A vs B. Then run the following to see how often the second player wins.
+Use [simplechessmatch](https://github.com/tonyjh/simplechessmatch) to test
+the strength of changes.
+
+Example:
 
 ```
-bazel run -c opt strength_test
+# A/B engine test with 250 ms per move for quick quality tests
+./scm --e1 /Users/louisobryan/tmp/4pchess/cli --e2 /Users/louisobryan/4pchess/cli --fixed 250 --games 500 --threads 10 --fens FENs_4PC_balanced.txt \
+    --custom1 "setoption name threads value 1" \
+    --custom2 "setoption name threads value 1" \
+    --pgn4 /tmp/games.pgn4 \
+    --margin 3000 \
+    --maxmoves 200
 ```
 
-You can use this test to validate that changes actually improve the strength.
+It is recommended to test with 5000 ms per move for confidence on the results.
+
+Once the run completes, you can check whether the result is significant
+by testing whether the p-value is less than `0.05`. For example,
+
+```
+python3 ttest.py --n_wins=243 --n_losses=199 --n_draws=25
+# => Ttest_1sampResult(statistic=2.100107728239835, pvalue=0.01811446939295551)
+```
 

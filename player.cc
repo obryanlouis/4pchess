@@ -295,10 +295,11 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
   bool is_tt_pv = false;
 
   std::optional<Move> tt_move;
+  const HashTableEntry* tte = nullptr;
   if (options_.enable_transposition_table) {
     int64_t key = board.HashKey();
 
-    const HashTableEntry* tte = transposition_table_->Get(key);
+    tte = transposition_table_->Get(key);
     if (tte != nullptr) {
       if (tte->key == key) { // valid entry
         if (tte->depth >= depth) {
@@ -337,7 +338,12 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
     return std::make_tuple(eval, std::nullopt);
   }
 
-  int eval = Evaluate(thread_state, maximizing_player, alpha, beta);
+  int eval = 0;
+  if (tt_move.has_value()) {
+    eval = tte->score;
+  } else {
+    eval = Evaluate(thread_state, maximizing_player, alpha, beta);
+  }
 
   (ss+2)->killers[0] = (ss+2)->killers[1] = Move();
   ss->move_count = 0;
@@ -765,7 +771,11 @@ AlphaBetaPlayer::QSearch(
     best_value = -kMateValue;
   } else {
     // stand pat
-    best_value = Evaluate(thread_state, maximizing_player, alpha, beta);
+    if (tt_move.has_value()) {
+      best_value = tte->score;
+    } else {
+      best_value = Evaluate(thread_state, maximizing_player, alpha, beta);
+    }
     if (best_value >= beta) {
       if (options_.enable_transposition_table) {
         transposition_table_->Save(
