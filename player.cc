@@ -24,13 +24,6 @@ AlphaBetaPlayer::AlphaBetaPlayer(std::optional<PlayerOptions> options) {
     options_ = *options;
   }
 
-  piece_evaluations_[PAWN] = options_.piece_eval_pawn;
-  piece_evaluations_[KNIGHT] = options_.piece_eval_knight;
-  piece_evaluations_[BISHOP] = options_.piece_eval_bishop;
-  piece_evaluations_[ROOK] = options_.piece_eval_rook;
-  piece_evaluations_[QUEEN] = options_.piece_eval_queen;
-  piece_evaluations_[KING] = 10000;
-
   piece_move_order_scores_[PAWN] = 1;
   piece_move_order_scores_[KNIGHT] = 2;
   piece_move_order_scores_[BISHOP] = 3;
@@ -391,7 +384,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
     board,
     pv_move.has_value() ? pv_move : tt_move,
     ss->killers,
-    piece_evaluations_,
+    kPieceEvaluations,
     thread_state.history_heuristic,
     thread_state.capture_heuristic,
     piece_move_order_scores_,
@@ -465,7 +458,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
         && !in_check) {
       Piece capture_piece = move.GetCapturePiece();
       PieceType capture_piece_type = capture_piece.GetPieceType();
-      int futility_eval = eval + 400 + 291 * lmr_depth + piece_evaluations_[capture_piece_type];
+      int futility_eval = eval + 400 + 291 * lmr_depth + kPieceEvaluations[capture_piece_type];
       if (futility_eval < alpha) {
         continue;
       }
@@ -733,7 +726,7 @@ AlphaBetaPlayer::QSearch(
     board,
     pv_move,
     ss->killers,
-    piece_evaluations_,
+    kPieceEvaluations,
     thread_state.history_heuristic,
     thread_state.capture_heuristic,
     piece_move_order_scores_,
@@ -757,7 +750,7 @@ AlphaBetaPlayer::QSearch(
     if (!in_check) {
       if (capture) {
         if (move.GetStandardCapture().Present()) {
-          int see = StaticExchangeEvaluationCapture(piece_evaluations_, board, move);
+          int see = StaticExchangeEvaluationCapture(kPieceEvaluations, board, move);
           if (see < 0) {
             continue;
           }

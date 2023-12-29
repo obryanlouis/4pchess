@@ -65,12 +65,6 @@ struct PlayerOptions {
   bool enable_piece_square_table = true;
   bool enable_knight_bonus = true;
 
-  int piece_eval_pawn = 50;
-  int piece_eval_knight = 300;
-  int piece_eval_bishop = 400;
-  int piece_eval_rook = 500;
-  int piece_eval_queen = 1000;
-
   // for pruning / reduction
   bool enable_futility_pruning = true;
   bool enable_late_move_reduction = true;
@@ -246,7 +240,6 @@ class AlphaBetaPlayer {
   int64_t num_razor_tested_ = 0;
 
   bool canceled_ = false;
-  int piece_evaluations_[6];
   int piece_move_order_scores_[6];
   PlayerOptions options_;
   int location_evaluations_[14][14];

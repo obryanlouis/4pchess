@@ -85,10 +85,10 @@ TEST(Speed, MoveTest) {
     std::cout << "#Lazy eval: " << lazy_eval << std::endl;
   }
 
-  if (res.has_value() && std::get<1>(res.value()).has_value()) {
-    const auto& val = res.value();
+  if (res.has_value() && std::get<1>(*res).has_value()) {
+    const auto& val = *res;
     std::cout << "Searched depth: " << std::get<2>(val) << std::endl;
-    std::cout << "move: " << std::get<1>(val).value() << std::endl;
+    std::cout << "move: " << *std::get<1>(val) << std::endl;
     std::cout << "evaluation: " << std::get<0>(val) << std::endl;
   } else {
     std::cout << "move missing" << std::endl;

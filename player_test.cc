@@ -33,8 +33,8 @@ TEST(PlayerTest, EvaluateCheckmate) {
 
   const auto& res = player.MakeMove(board);
   ASSERT_TRUE(res.has_value());
-  float valuation = std::get<0>(res.value());
-  const auto& move_or = std::get<1>(res.value());
+  float valuation = std::get<0>(*res);
+  const auto& move_or = std::get<1>(*res);
   EXPECT_FALSE(move_or.has_value());
   EXPECT_EQ(valuation, -kMateValue);
 }
@@ -49,10 +49,10 @@ TEST(PlayerTest, EvaluateCheckmateNextMove) {
 
   const auto& res = player.MakeMove(*board, std::nullopt, 2);
   ASSERT_TRUE(res.has_value());
-  float valuation = std::get<0>(res.value());
-  const auto& move_or = std::get<1>(res.value());
+  float valuation = std::get<0>(*res);
+  const auto& move_or = std::get<1>(*res);
   EXPECT_TRUE(move_or.has_value());
-  EXPECT_EQ(move_or.value(), Move(BoardLocation(1, 10), BoardLocation(1, 4)));
+  EXPECT_EQ(*move_or, Move(BoardLocation(1, 10), BoardLocation(1, 4)));
   EXPECT_EQ(valuation, kMateValue);
 }
 
@@ -71,8 +71,8 @@ TEST(PlayerTest, EvaluateStalemate) {
 
   const auto& res = player.MakeMove(board, std::nullopt, 1);
   ASSERT_TRUE(res.has_value());
-  float valuation = std::get<0>(res.value());
-  const auto& move_or = std::get<1>(res.value());
+  float valuation = std::get<0>(*res);
+  const auto& move_or = std::get<1>(*res);
   EXPECT_FALSE(move_or.has_value());
   EXPECT_EQ(valuation, 0);
 }
@@ -92,8 +92,8 @@ TEST(PlayerTest, EvaluatePieceImbalance) {
 
   const auto& res = player.MakeMove(board, std::nullopt, 1);
   ASSERT_TRUE(res.has_value());
-  float valuation = std::get<0>(res.value());
-  const auto& move_or = std::get<1>(res.value());
+  float valuation = std::get<0>(*res);
+  const auto& move_or = std::get<1>(*res);
   EXPECT_TRUE(move_or.has_value());
   EXPECT_GT(valuation, 0);
 }
@@ -109,11 +109,11 @@ TEST(PlayerTest, EvaluateCheckmateForcedCheckmate1) {
 
   const auto& res = player.MakeMove(*board);
   ASSERT_TRUE(res.has_value());
-  float valuation = std::get<0>(res.value());
+  float valuation = std::get<0>(*res);
   EXPECT_EQ(valuation, kMateValue);
-  const auto& move_or = std::get<1>(res.value());
+  const auto& move_or = std::get<1>(*res);
   ASSERT_TRUE(move_or.has_value());
-  EXPECT_EQ(move_or.value(), Move(BoardLocation(13, 8), BoardLocation(11, 6)));
+  EXPECT_EQ(*move_or, Move(BoardLocation(13, 8), BoardLocation(11, 6)));
 }
 
 TEST(PlayerTest, CheckPVInfoProducesValidMoves) {
@@ -128,7 +128,7 @@ TEST(PlayerTest, CheckPVInfoProducesValidMoves) {
   constexpr int kDepth = 4;
   const auto& res = player.MakeMove(*board, std::nullopt, kDepth);
   ASSERT_TRUE(res.has_value());
-  const auto& move_or = std::get<1>(res.value());
+  const auto& move_or = std::get<1>(*res);
   ASSERT_TRUE(move_or.has_value());
   const PVInfo* pvinfo = &player.GetPVInfo();
   int num_pvmoves = 0;
@@ -136,7 +136,7 @@ TEST(PlayerTest, CheckPVInfoProducesValidMoves) {
     const auto& pvmove_or = pvinfo->GetBestMove();
     if (pvmove_or.has_value()) {
       num_pvmoves++;
-      const auto& move = pvmove_or.value();
+      const auto& move = *pvmove_or;
       Move moves[300];
       size_t num_moves = board->GetPseudoLegalMoves2(moves, 300);
       bool found = false;

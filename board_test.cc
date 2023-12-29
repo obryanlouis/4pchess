@@ -1669,6 +1669,26 @@ TEST(BoardTest, DeliversCheck) {
 
 }
 
+TEST(BoardTest, Promotions) {
+  auto board = ParseBoardFromFEN("Y-0,0,0,0-0,0,0,1-0,0,1,1-0,0,0,0-0-{'enPassant':('','c8:d8','','')}-x,x,x,1,yN,1,yK,2,yN,yR,x,x,x/x,x,x,1,yP,yP,3,yP,yP,x,x,x/x,x,x,3,yP,1,yP,2,x,x,x/bR,bP,5,yP,4,gP,gR/1,bP,10,gP,gN/bB,bP,10,gP,1/bK,2,bP,7,gP,1,gK/4,rR,7,gP,1/11,gP,2/1,bP,1,yP,9,gN/1,bP,8,gP,1,gP,gR/x,x,x,rP,1,rN,1,rP,gB,2,x,x,x/x,x,x,2,rP,rP,1,rP,2,x,x,x/x,x,x,4,rK,3,x,x,x");
+  auto move_or = ParseMove(*board, "d5-d4=Q");
+  int64_t h0 = board->HashKey();
+  int piece_eval = board->PieceEvaluation();
+
+  ASSERT_TRUE(move_or.has_value());
+
+  board->MakeMove(*move_or);
+  auto piece = board->GetPiece(10, 3);
+  int64_t h1 = board->HashKey();
+  int piece_eval2 = board->PieceEvaluation();
+
+  EXPECT_TRUE(piece.Present());
+  EXPECT_EQ(piece.GetColor(), YELLOW);
+  EXPECT_EQ(piece.GetPieceType(), QUEEN);
+  EXPECT_NE(h0, h1);
+  EXPECT_NE(piece_eval, piece_eval2);
+}
+
 
 }  // namespace chess
 

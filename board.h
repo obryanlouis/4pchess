@@ -23,6 +23,16 @@ enum PieceType : int8_t {
   NO_PIECE = 6,
 };
 
+// In centipawns
+constexpr int kPieceEvaluations[6] = {
+  50,     // PAWN
+  300,    // KNIGHT
+  400,    // BISHOP
+  500,    // ROOK
+  1000,   // QUEEN
+  10000,  // KING (unused)
+};
+
 enum PlayerColor : int8_t {
   UNINITIALIZED_PLAYER = -1,
   RED = 0, BLUE = 1, YELLOW = 2, GREEN = 3,
@@ -636,7 +646,6 @@ class Board {
   EnpassantInitialization enp_;
   std::vector<Move> moves_; // list of moves from beginning of game
   std::vector<Move> move_buffer_;
-  int piece_evaluations_[6]; // one per piece type
   int piece_evaluation_ = 0;
   int player_piece_evaluations_[4] = {0, 0, 0, 0}; // one per player
 
@@ -659,7 +668,7 @@ Player GetPartner(const Player& player);
 
 // Returns the static exchange evaluation of a capture.
 int StaticExchangeEvaluationCapture(
-    int piece_evaluations[6],
+    const int piece_evaluations[6],
     Board& board,
     const Move& move);
 

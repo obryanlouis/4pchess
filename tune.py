@@ -16,6 +16,8 @@ parser.add_argument('-n_calls', '--n_calls', type=int,
     required=False, default=100)
 args = parser.parse_args()
 
+# NOTE: These params are outdated and we don't use this file (yet) to tune any
+# hyper-params of the program.
 _PARAMS = {
   'piece_eval_pawn': { 'space': skopt.space.space.Integer(10, 300), },
   'piece_eval_knight': { 'space': skopt.space.space.Integer(100, 600), },

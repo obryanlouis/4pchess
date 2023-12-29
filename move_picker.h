@@ -15,7 +15,7 @@ class MovePicker {
     Board& board,
     const std::optional<Move>& pvmove,
     Move* killers,
-    int piece_evaluations[6],
+    const int piece_evaluations[6],
     int history_heuristic[6][14][14][14][14],
     int capture_heuristic[6][4][6][4][14][14],
     int piece_move_order_scores[6],

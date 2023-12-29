@@ -55,15 +55,6 @@ cc_test(
 
 
 cc_binary(
-    name = "strength_test",
-    srcs = ["strength_test.cc"],
-    deps = [
-        ":board",
-        ":player",
-    ],
-)
-
-cc_binary(
     name = "cli",
     srcs = ["cli.cc"],
     deps = [

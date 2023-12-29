@@ -947,6 +947,12 @@ void Board::SetPiece(
   if (piece.GetPieceType() == KING) {
     king_locations_[piece.GetColor()] = location;
   }
+  // Update piece eval
+  if (piece.GetTeam() == RED_YELLOW) {
+    piece_evaluation_ += kPieceEvaluations[piece.GetPieceType()];
+  } else {
+    piece_evaluation_ -= kPieceEvaluations[piece.GetPieceType()];
+  }
 }
 
 void Board::RemovePiece(const BoardLocation& location) {
@@ -966,6 +972,12 @@ void Board::RemovePiece(const BoardLocation& location) {
   // Update king location
   if (piece.GetPieceType() == KING) {
     king_locations_[piece.GetColor()] = BoardLocation::kNoLocation;
+  }
+  // Update piece eval
+  if (piece.GetTeam() == RED_YELLOW) {
+    piece_evaluation_ -= kPieceEvaluations[piece.GetPieceType()];
+  } else {
+    piece_evaluation_ += kPieceEvaluations[piece.GetPieceType()];
   }
 }
 
@@ -992,12 +1004,7 @@ void Board::MakeMove(const Move& move) {
   // and en-passant capture.
   const auto capture = move.GetCapturePiece();
   if (capture.Present()) {
-    int value = piece_evaluations_[capture.GetPieceType()];
-    if (capture.GetTeam() == RED_YELLOW) {
-      piece_evaluation_ -= value;
-    } else {
-      piece_evaluation_ += value;
-    }
+    int value = kPieceEvaluations[capture.GetPieceType()];
     player_piece_evaluations_[capture.GetColor()] -= value;
   }
 
@@ -1094,12 +1101,7 @@ void Board::UndoMove() {
   // and en-passant capture.
   const auto capture = move.GetCapturePiece();
   if (capture.Present()) {
-    int value = piece_evaluations_[capture.GetPieceType()];
-    if (capture.GetTeam() == RED_YELLOW) {
-      piece_evaluation_ += value;
-    } else {
-      piece_evaluation_ -= value;
-    }
+    int value = kPieceEvaluations[capture.GetPieceType()];
     player_piece_evaluations_[capture.GetColor()] += value;
   }
 
@@ -1201,14 +1203,6 @@ Board::Board(
   : turn_(std::move(turn))
     {
 
-  // In centipawns
-  piece_evaluations_[PAWN] = 50;
-  piece_evaluations_[KNIGHT] = 300;
-  piece_evaluations_[BISHOP] = 400;
-  piece_evaluations_[ROOK] = 500;
-  piece_evaluations_[QUEEN] = 1000;
-  piece_evaluations_[KING] = 10000;
-
   for (int color = 0; color < 4; color++) {
     castling_rights_[color] = CastlingRights(false, false);
     if (castling_rights.has_value()) {
@@ -1248,11 +1242,11 @@ Board::Board(
           piece));
     PieceType piece_type = piece.GetPieceType();
     if (piece.GetTeam() == RED_YELLOW) {
-      piece_evaluation_ += piece_evaluations_[static_cast<int>(piece_type)];
+      piece_evaluation_ += kPieceEvaluations[static_cast<int>(piece_type)];
     } else {
-      piece_evaluation_ -= piece_evaluations_[static_cast<int>(piece_type)];
+      piece_evaluation_ -= kPieceEvaluations[static_cast<int>(piece_type)];
     }
-    player_piece_evaluations_[piece.GetColor()] += piece_evaluations_[piece_type];
+    player_piece_evaluations_[piece.GetColor()] += kPieceEvaluations[piece_type];
     if (piece.GetPieceType() == KING) {
       king_locations_[color] = location;
     }
@@ -1663,8 +1657,8 @@ int StaticExchangeEvaluationFromLists(
 }
 
 int StaticExchangeEvaluationFromLocation(
-    int piece_evaluations[6],
-      const Board& board, const BoardLocation& loc) {
+    const int piece_evaluations[6],
+    const Board& board, const BoardLocation& loc) {
   constexpr size_t kLimit = 5;
   PlacedPiece attackers_this_side[kLimit];
   PlacedPiece attackers_that_side[kLimit];
@@ -1709,7 +1703,7 @@ int StaticExchangeEvaluationFromLocation(
 } // namespace
 
 int StaticExchangeEvaluationCapture(
-    int piece_evaluations[6],
+    const int piece_evaluations[6],
     Board& board,
     const Move& move) {
 

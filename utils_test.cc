@@ -84,8 +84,8 @@ TEST(UtilsTest, ParseMoveTest) {
                           board->GetPiece(7, 12)));
 
   board = Board::CreateStandardSetup();
-  board->MakeMove(ParseMove(*board, "h2-h3").value());
-  board->MakeMove(ParseMove(*board, "b7-c7").value());
+  board->MakeMove(*ParseMove(*board, "h2-h3"));
+  board->MakeMove(*ParseMove(*board, "b7-c7"));
 
   move_or = ParseMove(*board, "g13-g12");
   EXPECT_EQ(move_or, Move(BoardLocation(1, 6), BoardLocation(2, 6)));
