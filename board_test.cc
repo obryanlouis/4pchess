@@ -1484,6 +1484,23 @@ TEST(BoardTest, KeyTest) {
   EXPECT_NE(h0, h5);
 }
 
+TEST(BoardTest, KeyTest_NullMove) {
+  auto board = Board::CreateStandardSetup();
+  int64_t h0 = board->HashKey();
+  board->MakeNullMove();
+  int64_t h1 = board->HashKey();
+  board->MakeNullMove();
+
+  board->UndoNullMove();
+  int64_t h1_1 = board->HashKey();
+  board->UndoNullMove();
+  int64_t h0_1 = board->HashKey();
+
+  EXPECT_EQ(h0, h0_1);
+  EXPECT_EQ(h1, h1_1);
+  EXPECT_NE(h0, h1);
+}
+
 TEST(BoardTest, IsKingInCheck) {
   auto board = Board::CreateStandardSetup();
   board->MakeMove(Move(BoardLocation(12, 7), BoardLocation(11, 7))); // h3
@@ -1547,13 +1564,13 @@ TEST(BoardTest, MakeAndUndoMoves) {
 
   int64_t hash = board->HashKey();
 
-  board->MakeMove(FindMove(*board, Loc(12, 3), Loc(11, 3)).value());
-  board->MakeMove(FindMove(*board, Loc(6, 0), Loc(5, 1)).value());
-  board->MakeMove(FindMove(*board, Loc(0, 4), Loc(2, 5)).value());
+  board->MakeMove(*FindMove(*board, Loc(12, 3), Loc(11, 3)));
+  board->MakeMove(*FindMove(*board, Loc(6, 0), Loc(5, 1)));
+  board->MakeMove(*FindMove(*board, Loc(0, 4), Loc(2, 5)));
   board->MakeNullMove();
-  board->MakeMove(FindMove(*board, Loc(13, 6), Loc(10, 3)).value());
-  board->MakeMove(FindMove(*board, Loc(9, 2), Loc(10, 3)).value());
-  board->MakeMove(FindMove(*board, Loc(7, 4), Loc(9, 2)).value());
+  board->MakeMove(*FindMove(*board, Loc(13, 6), Loc(10, 3)));
+  board->MakeMove(*FindMove(*board, Loc(9, 2), Loc(10, 3)));
+  board->MakeMove(*FindMove(*board, Loc(7, 4), Loc(9, 2)));
 
   board->UndoMove();
   board->UndoMove();

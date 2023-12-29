@@ -144,7 +144,6 @@ class AlphaBetaPlayer {
  public:
   AlphaBetaPlayer(
       std::optional<PlayerOptions> options = std::nullopt);
-  ~AlphaBetaPlayer();
 
   std::optional<std::tuple<int, std::optional<Move>, int>> MakeMove(
       Board& board,
@@ -209,9 +208,6 @@ class AlphaBetaPlayer {
 
   void EnableDebug(bool enable) { enable_debug_ = enable; }
 
-  // hash buffer size per ply for searching_ variable
-  static constexpr int kSearchHashBufferSize = 1000;
-
   // for debugging
   int64_t test1_ = 0;
   int64_t test2_ = 0;
@@ -275,8 +271,6 @@ class AlphaBetaPlayer {
   // number of moves a piece needs to have to be considered active
   int piece_activation_threshold_[7];
   bool knight_to_king_[14][14][14][14];
-
-  bool* searching_ = nullptr;
 };
 
 }  // namespace chess

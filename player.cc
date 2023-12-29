@@ -19,20 +19,6 @@
 
 namespace chess {
 
-namespace {
-
-int MoveHash(const Move& move) {
-  int hash = 6833;
-  hash += move.From().GetRow() * 6397;
-  hash += move.From().GetCol() * 6961;
-  hash += move.To().GetRow() * 7247;
-  hash += move.To().GetCol() * 7349;
-  hash = hash % AlphaBetaPlayer::kSearchHashBufferSize;
-  return hash;
-}
-
-}  // namespace
-
 AlphaBetaPlayer::AlphaBetaPlayer(std::optional<PlayerOptions> options) {
   if (options.has_value()) {
     options_ = *options;
@@ -208,12 +194,6 @@ AlphaBetaPlayer::AlphaBetaPlayer(std::optional<PlayerOptions> options) {
       }
     }
   }
-
-  searching_ = new bool[kMaxPly * kSearchHashBufferSize];
-}
-
-AlphaBetaPlayer::~AlphaBetaPlayer() {
-  delete[] searching_;
 }
 
 
@@ -394,10 +374,6 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
           && nmp_score < kMateValue) {
         num_null_moves_pruned_++;
 
-        if (options_.enable_transposition_table) {
-          transposition_table_->Save(board.HashKey(), depth, std::nullopt, beta, LOWER_BOUND, is_pv_node);
-        }
-
         return std::make_tuple(beta, std::nullopt);
       }
     }
@@ -430,21 +406,10 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
   int move_count = 0;
   int quiets = 0;
 
-  // some moves are deferred because another thread is searching them already
-  size_t deferred_index = 0;
-  std::vector<Move*> deferred_moves;
-  bool processing_deferred = false;
-
   while (true) {
     Move* move_ptr = move_picker.GetNextMove();
-    processing_deferred = false;
     if (move_ptr == nullptr) {
-      if (!deferred_moves.empty() && deferred_index < deferred_moves.size()) {
-        move_ptr = deferred_moves[deferred_index++];
-        processing_deferred = true;
-      } else {
-        break;
-      }
+      break;
     }
 
     Move& move = *move_ptr;
@@ -507,33 +472,9 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
     }
 
     board.MakeMove(move);
-    int move_hash = MoveHash(move);
-
-    // hash value to promote threads searching on different branches
-    int search_hash = (ply*kSearchHashBufferSize + move_hash)
-      % (kMaxPly * kSearchHashBufferSize);
-    bool maybe_defer = options_.enable_multithreading
-      && is_pv_node
-      && !processing_deferred;
-
-    if (maybe_defer) {
-      bool searching = searching_[search_hash] = true;
-
-      if (searching) {
-        // move kept alive so long as move_picker is
-        deferred_moves.push_back(move_ptr);
-        // undo move and continue
-        searching_[search_hash] = false;
-        board.UndoMove();
-        continue;
-      }
-    }
 
     if (board.CheckWasLastMoveKingCapture() != IN_PROGRESS) {
       board.UndoMove();
-      if (options_.enable_multithreading) {
-        searching_[search_hash] = false;
-      }
 
       alpha = beta; // fail hard
       //value = kMateValue;
@@ -544,9 +485,6 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
 
     if (board.IsKingInCheck(player)) { // invalid move
       board.UndoMove();
-      if (options_.enable_multithreading) {
-        searching_[search_hash] = false;
-      }
 
       continue;
     }
@@ -635,9 +573,6 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
     }
 
     board.UndoMove();
-    if (options_.enable_multithreading) {
-      searching_[search_hash] = false;
-    }
 
     if (options_.enable_mobility_evaluation
         || options_.enable_piece_activation) { // reset

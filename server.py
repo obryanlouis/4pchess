@@ -211,10 +211,10 @@ class Server:
             return True
           move = res['best_move']
           score = res['score']
-        if score is not None and score >= 100000000:
-          if not self._gameoverchat:
-            self._gameoverchat = True
-            self._api.chat('gg')
+#        if score is not None and score >= 100000000:
+#          if not self._gameoverchat:
+#            self._gameoverchat = True
+#            self._api.chat('gg')
         play_response = self._api.play(move)
         self._move_number += 1
 

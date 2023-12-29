@@ -29,7 +29,7 @@ make cli
 After building, run the program:
 ```
 bazel-bin/cli  # for bazel
-# or just `cli` for make
+# or just `./cli` for make
 ```
 
 Then, analyze a position as below.
@@ -106,5 +106,11 @@ by testing whether the p-value is less than `0.05`. For example,
 ```
 python3 ttest.py --n_wins=243 --n_losses=199 --n_draws=25
 # => Ttest_1sampResult(statistic=2.100107728239835, pvalue=0.01811446939295551)
+```
+
+### Regression tests
+
+```
+bazel run -c opt regression_tests --test_output=all --runs_per_test=30
 ```
 

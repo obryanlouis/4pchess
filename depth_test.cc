@@ -49,7 +49,12 @@ int SearchFEN(Board& board, int move_ms) {
     std::cout << "No move value!" << std::endl;
     abort();
   }
-  return std::get<2>(res.value());
+  return std::get<2>(*res);
+}
+
+bool FileExists(const std::string& filepath) {
+  std::ifstream file(filepath.c_str());
+  return file.good();
 }
 
 class Runner {
@@ -57,7 +62,7 @@ class Runner {
   Runner() {
     std::string fens_filepath = absl::GetFlag(FLAGS_fens_filepath);
     if (fens_filepath.empty()
-        || !std::filesystem::exists(fens_filepath)) {
+        || !FileExists(fens_filepath)) {
       std::cout << "FENs filepath not found: " << fens_filepath << std::endl;
       abort();
     }
