@@ -81,10 +81,10 @@ AlphaBetaPlayer::AlphaBetaPlayer(std::optional<PlayerOptions> options) {
 
             if (is_piece) {
               // back rank penalties
-              bool back_rank = (color == RED && row == 13)
-                            || (color == YELLOW && row == 0)
-                            || (color == BLUE && col == 0)
-                            || (color == GREEN && col == 13);
+              bool back_rank = (color == RED && row >= 12)
+                            || (color == YELLOW && row <= 1)
+                            || (color == BLUE && col <= 1)
+                            || (color == GREEN && col >= 12);
               if (back_rank) {
                 table_value -= 25;
               }
@@ -435,7 +435,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       continue;
     }
 
-    int r = 1 + std::max(0,(depth-5)/5);
+    int r = 1 + std::max(0,(depth-5)/5) + move_count/30;
 
     if (quiet) {
       r++;
@@ -712,6 +712,10 @@ AlphaBetaPlayer::QSearch(
 
       return std::make_tuple(best_value, std::nullopt);
     }
+    // delta pruning
+    if (best_value + kPieceEvaluations[QUEEN] < alpha) {
+      return std::make_tuple(alpha, std::nullopt);
+    }
   }
 
   std::optional<Move> best_move;
@@ -986,6 +990,8 @@ int AlphaBetaPlayer::Evaluate(
       }
     }
 
+    int activation_ry = 0;
+    int activation_bg = 0;
     if (options_.enable_piece_activation) {
       auto team_activation_score = [](int n_player1, int n_player2) {
         constexpr int A = 25;
@@ -994,14 +1000,56 @@ int AlphaBetaPlayer::Evaluate(
       };
 
       int* n_activated = thread_state.NActivated();
-      eval += team_activation_score(n_activated[RED], n_activated[YELLOW])
-            - team_activation_score(n_activated[BLUE], n_activated[GREEN]);
+      activation_ry = team_activation_score(n_activated[RED], n_activated[YELLOW]);
+      activation_bg = team_activation_score(n_activated[BLUE], n_activated[GREEN]);
+      eval += activation_ry - activation_bg;
+    }
+
+    // Asymmetric evaluation for playing style.
+    // If engine_team is NO_TEAM, then the eval is symmetric.
+    constexpr int kAsymmetricQueenBonus = 25;
+    constexpr int kAsymmetricQueenBonus2 = 25;
+    constexpr int kStartEvaluation =
+      16 * kPieceEvaluations[PAWN]
+      + 4 * kPieceEvaluations[KNIGHT]
+      + 4 * kPieceEvaluations[BISHOP]
+      + 4 * kPieceEvaluations[ROOK]
+      + 2 * kPieceEvaluations[QUEEN]
+      + 2 * kPieceEvaluations[KING]
+      ;
+    constexpr float kAsymmetricPieceEvalFactor = 0.01;
+    constexpr float kAsymmetricActivationEvalFactor = 0.00;
+
+    auto asym_eval = [](
+        int n_queen,
+        int activation_eval,
+        int player1_eval,
+        int player2_eval) {
+      int asym_eval = 0;
+      asym_eval += n_queen * kAsymmetricQueenBonus;
+      if (n_queen >= 2) {
+        asym_eval += kAsymmetricQueenBonus2;
+      }
+      asym_eval += kAsymmetricActivationEvalFactor * activation_eval;
+      asym_eval += kAsymmetricPieceEvalFactor * (player1_eval + player2_eval);
+      // subtract constant to make the score even at the start position
+      asym_eval -= kAsymmetricQueenBonus * 2 + kAsymmetricQueenBonus2;
+      asym_eval -= kAsymmetricPieceEvalFactor * kStartEvaluation;
+      return asym_eval;
+    };
+
+    if (options_.engine_team == RED_YELLOW) {
+      eval += asym_eval(n_queen_ry, activation_ry,
+          board.PieceEvaluation(RED), board.PieceEvaluation(YELLOW));
+    } else if (options_.engine_team == BLUE_GREEN) {
+      eval -= asym_eval(n_queen_bg, activation_bg,
+          board.PieceEvaluation(BLUE), board.PieceEvaluation(GREEN));
     }
 
     // Mobility evaluation
     if (options_.enable_mobility_evaluation) {
       int* total_moves = thread_state.TotalMoves();
-      eval += 5 * (total_moves[RED] + total_moves[YELLOW]
+      eval += 2 * (total_moves[RED] + total_moves[YELLOW]
                    - total_moves[BLUE] - total_moves[GREEN]);
     }
 

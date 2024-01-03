@@ -52,6 +52,7 @@ class UciWrapper:
     self._ponder_thread = None
     self._ponder_result = {}
     self._ponder_state = {'ponder_time': 0}
+    self._team = None
 
   def create_process(self, num_threads):
     self._process = subprocess.Popen(
@@ -71,12 +72,21 @@ class UciWrapper:
     if self._process is None or self._process.returncode is not None:
       print('recreate process')
       self._process = self.create_process()
+      self.set_team(self._team)
 
   def maybe_stop_ponder_thread(self):
     if self._ponder_thread is not None:
       self._process.stdin.write('stop\n')
       self._ponder_thread.join(10e-6)  # make sure it actually stops
       self._ponder_thread = None
+
+  def set_team(self, team):
+    if team != self._team:
+      print('set team:', team)
+      self._team = team
+      if self._team is not None:
+        self._process.stdin.write(
+            f'setoption name engine_team value {team}\n')
 
   def ponder(self, fen: str, move: str):
     print('Pondering...')
@@ -134,6 +144,7 @@ class UciWrapper:
       response = dict(self._ponder_result)
       response['best_move'] = response['pv'][1]
       response['pv'] = response['pv'][1:]
+      response['ponder_hit'] = True
       return response
 
     # Stop searching early if the move is forced

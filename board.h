@@ -39,7 +39,7 @@ enum PlayerColor : int8_t {
 };
 
 enum Team : int8_t {
-  RED_YELLOW = 0, BLUE_GREEN = 1,
+  RED_YELLOW = 0, BLUE_GREEN = 1, NO_TEAM = 2,
 };
 
 class Player {
@@ -362,8 +362,8 @@ class Move {
   std::string PrettyStr() const;
   // NOTE: This does not find discovered checks.
   bool DeliversCheck(Board& board);
-  int SEE(Board& board, int* piece_evaluations);
-  int ApproxSEE(Board& board, int* piece_evaluations);
+  int SEE(Board& board, const int* piece_evaluations);
+  int ApproxSEE(Board& board, const int* piece_evaluations);
 
  private:
   BoardLocation from_;  // 1

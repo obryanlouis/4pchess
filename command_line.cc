@@ -304,6 +304,21 @@ void CommandLine::HandleCommand(
         player_options_.enable_multithreading = n_threads > 1;
         player_ = std::make_shared<AlphaBetaPlayer>(player_options_);
       }
+    } else if (option_name == "engine_team") {
+      if (option_value == "red_yellow") {
+        player_options_.engine_team = RED_YELLOW;
+        player_ = std::make_shared<AlphaBetaPlayer>(player_options_);
+      } else if (option_value == "blue_green") {
+        player_options_.engine_team = BLUE_GREEN;
+        player_ = std::make_shared<AlphaBetaPlayer>(player_options_);
+      } else if (option_value == "no_team") {
+        player_options_.engine_team = NO_TEAM;
+        player_ = std::make_shared<AlphaBetaPlayer>(player_options_);
+      } else {
+        SendInvalidCommandMessage(
+            "Invalid team: " + option_value + ". Must be red_yellow, or blue_green.");
+        return;
+      }
     } else {
       SendInvalidCommandMessage("Unrecognized option: " + option_name);
       return;

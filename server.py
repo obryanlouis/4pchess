@@ -24,6 +24,13 @@ parser.add_argument('-max_depth', '--max_depth', type=int, required=False,
     default=30)
 parser.add_argument('-arrows', '--arrows', type=parse_bool, required=False,
     default=False)
+# Enables asymmetric evaluation (anti-human eval)
+parser.add_argument(
+    '-asymmetric_eval', '--asymmetric_eval', type=parse_bool, required=False,
+    default=False)
+parser.add_argument(
+    '-chat_eval', '--chat_eval', type=parse_bool, required=False,
+    default=False)
 args = parser.parse_args()
 
 
@@ -66,11 +73,12 @@ def _standardize_move(move: str) -> str:
 class Pgn4Info:
 
   def __init__(self, base_time_ms: int, incr_time_ms: int, delay_time_ms: int,
-      last_move: str | None):
+      last_move: str | None, team: str):
     self.base_time_ms = base_time_ms
     self.incr_time_ms = incr_time_ms
     self.delay_time_ms = delay_time_ms
     self.last_move = last_move
+    self.team = team
 
   @classmethod
   def FromString(cls, pgn4: str):
@@ -97,8 +105,19 @@ class Pgn4Info:
     m = re.match(pattern, last_line, re.DOTALL)
     if m:
       last_move = _standardize_move(m.group(1))
+    pattern = '(Red|Yellow|Green|Blue) "TeamTitan'
+    m = re.search(pattern, pgn4, re.IGNORECASE)
+    team = None
+    if m:
+      color = m.group(1).lower()
+      if color in {'red', 'yellow'}:
+        team = 'red_yellow'
+      elif color in {'blue', 'green'}:
+        team = 'blue_green'
+      else:
+        team = 'no_team'
 
-    return Pgn4Info(base_time_ms, incr_time_ms, delay_time_ms, last_move)
+    return Pgn4Info(base_time_ms, incr_time_ms, delay_time_ms, last_move, team)
 
 
 class Server:
@@ -137,6 +156,8 @@ class Server:
       pgn4_info = Pgn4Info.FromString(json_response['pgn4'])
       if pgn4_info is not None:
         self._pgn4_info = pgn4_info
+        if args.asymmetric_eval:
+          self._uci.set_team(pgn4_info.team)
 
     info = json_response.get('info')
     if info:
@@ -157,6 +178,10 @@ class Server:
         if 'gameOver' in fen:
           if args.arrows:
             self.clear_arrows()
+          if not self._gameoverchat:
+            self._gameoverchat = True
+            self._api.chat('gg')
+            self._uci.maybe_stop_ponder_thread()
           return True
 
         if fen == '4PCo':
@@ -211,6 +236,19 @@ class Server:
             return True
           move = res['best_move']
           score = res['score']
+
+          if args.chat_eval and score is not None:
+            team = self._pgn4_info.team
+            score_ry = None
+            if team == 'red_yellow':
+              score_ry = score / 100
+            elif team == 'blue_green':
+              score_ry = -score / 100
+            if score_ry is not None:
+              if res.get('ponder_hit', False):
+                score_ry = -score_ry
+              self._api.chat(f'score: {score_ry:.02f}')
+
 #        if score is not None and score >= 100000000:
 #          if not self._gameoverchat:
 #            self._gameoverchat = True
@@ -249,7 +287,7 @@ class Server:
         response = self._api.stream(timeout)
         self._read_streaming_response(response)
         response.close()
-      except:
+      except Exception as e:
         pass
       time.sleep(0.25)
 

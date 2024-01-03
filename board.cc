@@ -948,11 +948,13 @@ void Board::SetPiece(
     king_locations_[piece.GetColor()] = location;
   }
   // Update piece eval
+  int piece_eval = kPieceEvaluations[piece.GetPieceType()];
   if (piece.GetTeam() == RED_YELLOW) {
-    piece_evaluation_ += kPieceEvaluations[piece.GetPieceType()];
+    piece_evaluation_ += piece_eval;
   } else {
-    piece_evaluation_ -= kPieceEvaluations[piece.GetPieceType()];
+    piece_evaluation_ -= piece_eval;
   }
+  player_piece_evaluations_[piece.GetColor()] += piece_eval;
 }
 
 void Board::RemovePiece(const BoardLocation& location) {
@@ -974,11 +976,13 @@ void Board::RemovePiece(const BoardLocation& location) {
     king_locations_[piece.GetColor()] = BoardLocation::kNoLocation;
   }
   // Update piece eval
+  int piece_eval = kPieceEvaluations[piece.GetPieceType()];
   if (piece.GetTeam() == RED_YELLOW) {
-    piece_evaluation_ -= kPieceEvaluations[piece.GetPieceType()];
+    piece_evaluation_ -= piece_eval;
   } else {
-    piece_evaluation_ += kPieceEvaluations[piece.GetPieceType()];
+    piece_evaluation_ += piece_eval;
   }
+  player_piece_evaluations_[piece.GetColor()] -= piece_eval;
 }
 
 void Board::InitializeHash() {
@@ -999,14 +1003,6 @@ void Board::MakeMove(const Move& move) {
   // 5. Castling (rights, rook move)
 
   const auto piece = GetPiece(move.From());
-
-  // TODO: refactor this -- it should account for the case where we both capture
-  // and en-passant capture.
-  const auto capture = move.GetCapturePiece();
-  if (capture.Present()) {
-    int value = kPieceEvaluations[capture.GetPieceType()];
-    player_piece_evaluations_[capture.GetColor()] -= value;
-  }
 
   // Capture
   const auto standard_capture = GetPiece(move.To());
@@ -1097,14 +1093,6 @@ void Board::UndoMove() {
     SetPiece(from, piece);
   }
 
-  // TODO: refactor this -- it should account for the case where we both capture
-  // and en-passant capture.
-  const auto capture = move.GetCapturePiece();
-  if (capture.Present()) {
-    int value = kPieceEvaluations[capture.GetPieceType()];
-    player_piece_evaluations_[capture.GetColor()] += value;
-  }
-
   // Place back captured pieces
   const auto standard_capture = move.GetStandardCapture();
   if (standard_capture.Present()) {
@@ -1147,6 +1135,11 @@ Team Board::TeamToPlay() const {
 }
 
 int Board::PieceEvaluation() const {
+  assert(player_piece_evaluations_[RED]
+       + player_piece_evaluations_[YELLOW]
+       - player_piece_evaluations_[BLUE]
+       - player_piece_evaluations_[GREEN]
+       == piece_evaluation_);
   return piece_evaluation_;
 }
 
@@ -1246,7 +1239,7 @@ Board::Board(
     } else {
       piece_evaluation_ -= kPieceEvaluations[static_cast<int>(piece_type)];
     }
-    player_piece_evaluations_[piece.GetColor()] += kPieceEvaluations[piece_type];
+    player_piece_evaluations_[piece.GetColor()] += kPieceEvaluations[static_cast<int>(piece_type)];
     if (piece.GetPieceType() == KING) {
       king_locations_[color] = location;
     }
@@ -1621,14 +1614,14 @@ bool Move::DeliversCheck(Board& board) {
 }
 
 int Move::SEE(Board& board,
-               int* piece_evaluations) {
+               const int* piece_evaluations) {
   if (see_ == kSeeNotSet) {
     see_ = StaticExchangeEvaluationCapture(piece_evaluations, board, *this);
   }
   return see_;
 }
 
-int Move::ApproxSEE(Board& board, int* piece_evaluations) {
+int Move::ApproxSEE(Board& board, const int* piece_evaluations) {
   const auto capture = GetCapturePiece();
   const auto piece = board.GetPiece(From());
   int captured_val = piece_evaluations[capture.GetPieceType()];
@@ -1707,7 +1700,7 @@ int StaticExchangeEvaluationCapture(
     Board& board,
     const Move& move) {
 
-  const auto captured = move.GetStandardCapture();
+  const auto captured = move.GetCapturePiece();
   assert(captured.Present());
 
   int value = piece_evaluations[captured.GetPieceType()];

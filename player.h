@@ -64,6 +64,7 @@ struct PlayerOptions {
   bool enable_lazy_eval = true;
   bool enable_piece_square_table = true;
   bool enable_knight_bonus = true;
+  Team engine_team = NO_TEAM;
 
   // for pruning / reduction
   bool enable_futility_pruning = true;
@@ -144,6 +145,7 @@ class AlphaBetaPlayer {
       std::optional<std::chrono::milliseconds> time_limit = std::nullopt,
       int max_depth = 20);
   int StaticEvaluation(Board& board);
+  // Eval with respect to the maximizing player
   int Evaluate(ThreadState& thread_state, bool maximizing_player,
       int alpha = -kMateValue, int beta = kMateValue);
   void CancelEvaluation() { canceled_ = true; }
