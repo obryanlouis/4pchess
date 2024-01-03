@@ -1049,7 +1049,7 @@ int AlphaBetaPlayer::Evaluate(
     // Mobility evaluation
     if (options_.enable_mobility_evaluation) {
       int* total_moves = thread_state.TotalMoves();
-      eval += 2 * (total_moves[RED] + total_moves[YELLOW]
+      eval += 5 * (total_moves[RED] + total_moves[YELLOW]
                    - total_moves[BLUE] - total_moves[GREEN]);
     }
 
