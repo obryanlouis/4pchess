@@ -361,7 +361,7 @@ void Player::MakeMove(const v8::FunctionCallbackInfo<v8::Value>& args) {
   player_ptr->SetCanceled(false);
 
   // for debugging
-  int zero_move_evaluation = player.StaticEvaluation(*board) / 100.0;
+  int zero_move_evaluation = player.StaticEvaluation(*board);
 
   int depth = args[1]->Int32Value(context).FromJust();
   // by default, there's no time limit
@@ -383,7 +383,7 @@ void Player::MakeMove(const v8::FunctionCallbackInfo<v8::Value>& args) {
     //     'to': {'row': int, 'col': int}}
     //   ]}
 
-    float evaluation = std::get<0>(move_res.value()) / 100.0;
+    float evaluation = std::get<0>(move_res.value());
 
     Local<Object> res = Object::New(isolate);
 

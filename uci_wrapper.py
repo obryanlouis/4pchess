@@ -35,6 +35,7 @@ def get_move_response(process, response, pv_callback):
       response['best_move'] = pv[0]
       response['pv'] = pv
       response['score'] = int(score)
+      response['depth'] = depth
     if 'bestmove' in line:
       m = re.search('bestmove (.*)', line)
       response['best_move'] = m.group(1)

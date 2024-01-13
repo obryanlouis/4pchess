@@ -119,6 +119,8 @@ class ThreadState {
   // (from_row, from_col, to_row, to_col)
   Move* counter_moves = nullptr;
 
+  int n_threats[4] = {0, 0, 0, 0};
+
  private:
   PlayerOptions options_;
   Board board_;
@@ -266,6 +268,7 @@ class AlphaBetaPlayer {
   // number of moves a piece needs to have to be considered active
   int piece_activation_threshold_[7];
   bool knight_to_king_[14][14][14][14];
+  Team root_team_ = NO_TEAM;
 };
 
 }  // namespace chess

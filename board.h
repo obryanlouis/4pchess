@@ -39,7 +39,7 @@ enum PlayerColor : int8_t {
 };
 
 enum Team : int8_t {
-  RED_YELLOW = 0, BLUE_GREEN = 1, NO_TEAM = 2,
+  RED_YELLOW = 0, BLUE_GREEN = 1, NO_TEAM = 2, CURRENT_TEAM = 3,
 };
 
 class Player {

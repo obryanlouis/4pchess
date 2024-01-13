@@ -314,6 +314,9 @@ void CommandLine::HandleCommand(
       } else if (option_value == "no_team") {
         player_options_.engine_team = NO_TEAM;
         player_ = std::make_shared<AlphaBetaPlayer>(player_options_);
+      } else if (option_value == "current_team") {
+        player_options_.engine_team = CURRENT_TEAM;
+        player_ = std::make_shared<AlphaBetaPlayer>(player_options_);
       } else {
         SendInvalidCommandMessage(
             "Invalid team: " + option_value + ". Must be red_yellow, or blue_green.");

@@ -21,7 +21,7 @@ parser.add_argument('-prod', '--prod', type=parse_bool, required=False,
 parser.add_argument('-num_threads', '--num_threads', type=int, required=False,
     default=11)
 parser.add_argument('-max_depth', '--max_depth', type=int, required=False,
-    default=30)
+    default=100)
 parser.add_argument('-arrows', '--arrows', type=parse_bool, required=False,
     default=False)
 # Enables asymmetric evaluation (anti-human eval)
@@ -31,6 +31,9 @@ parser.add_argument(
 parser.add_argument(
     '-chat_eval', '--chat_eval', type=parse_bool, required=False,
     default=False)
+parser.add_argument(
+    '-enable_tablebase', '--enable_tablebase', type=parse_bool, required=False,
+    default=True)
 args = parser.parse_args()
 
 
@@ -203,7 +206,9 @@ class Server:
         if self._move_number <= 2:
           self._gameoverchat = False
 
-        move = tablebase.FEN_TO_BEST_MOVE.get(fen)
+        move = None
+        if args.enable_tablebase:
+          move = tablebase.FEN_TO_BEST_MOVE.get(fen)
         score = None
         if move is None:
           self._uci.set_position(fen)
@@ -236,6 +241,7 @@ class Server:
             return True
           move = res['best_move']
           score = res['score']
+          depth = res['depth']
 
           if args.chat_eval and score is not None:
             team = self._pgn4_info.team
@@ -247,7 +253,11 @@ class Server:
             if score_ry is not None:
               if res.get('ponder_hit', False):
                 score_ry = -score_ry
-              self._api.chat(f'score: {score_ry:.02f}')
+              chat = [f'score: {score_ry:.02f}']
+              if depth is not None:
+                chat.append(f'depth: {depth}')
+              chat = ', '.join(chat)
+              self._api.chat(chat)
 
 #        if score is not None and score >= 100000000:
 #          if not self._gameoverchat:

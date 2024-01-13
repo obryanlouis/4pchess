@@ -629,6 +629,7 @@ size_t Board::GetAttackers2(
 
   int loc_row = location.GetRow();
   int loc_col = location.GetCol();
+  bool no_team = team == NO_TEAM;
 
   // Rooks & queens
   for (int do_incr_row = 0; do_incr_row < 2; ++do_incr_row) {
@@ -640,7 +641,7 @@ size_t Board::GetAttackers2(
       while (row >= 0 && row < 14 && col >= 0 && col < 14) {
         const auto piece = GetPiece(row, col);
         if (piece.Present()) {
-          if (piece.GetTeam() == team
+          if ((piece.GetTeam() == team || no_team)
               && (piece.GetPieceType() == ROOK
                   || piece.GetPieceType() == QUEEN)) {
             ADD_ATTACKER(row, col, piece);
@@ -663,7 +664,7 @@ size_t Board::GetAttackers2(
       while (IsLegalLocation(row, col)) {
         const auto piece = GetPiece(row, col);
         if (piece.Present()) {
-          if (piece.GetTeam() == team
+          if ((piece.GetTeam() == team || no_team)
               && (piece.GetPieceType() == BISHOP
                   || piece.GetPieceType() == QUEEN)) {
             ADD_ATTACKER(row, col, piece);
@@ -685,7 +686,7 @@ size_t Board::GetAttackers2(
         if (IsLegalLocation(row, col)) {
           const auto piece = GetPiece(row, col);
           if (piece.Present()
-              && piece.GetTeam() == team
+              && (piece.GetTeam() == team || no_team)
               && piece.GetPieceType() == KNIGHT) {
             ADD_ATTACKER(row, col, piece);
           }
@@ -703,7 +704,7 @@ size_t Board::GetAttackers2(
         if (col >= 0 && col < 14) {
           const auto piece = GetPiece(row, col);
           if (piece.Present()
-              && piece.GetTeam() == team
+              && (piece.GetTeam() == team || no_team)
               && piece.GetPieceType() == PAWN) {
             bool attacks = false;
             switch (piece.GetColor()) {
@@ -753,7 +754,7 @@ size_t Board::GetAttackers2(
       if (IsLegalLocation(row, col)) {
         const auto piece = GetPiece(row, col);
         if (piece.Present()
-            && piece.GetTeam() == team
+            && (piece.GetTeam() == team || no_team)
             && piece.GetPieceType() == KING) {
           ADD_ATTACKER(row, col, piece);
         }

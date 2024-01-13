@@ -439,6 +439,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
 
     if (quiet) {
       r++;
+      r += depth / 8;
     }
 
     int new_depth = depth - 1;
@@ -938,6 +939,17 @@ int AlphaBetaPlayer::Evaluate(
     // Piece evaluation
     eval = board.PieceEvaluation();
 
+    auto threat_value = [](int t1, int t2) {
+      constexpr int kThreatValue = 120;
+      int threat = kThreatValue * (t1 + t2);
+      return threat;
+    };
+
+    eval += threat_value(thread_state.n_threats[RED],
+                         thread_state.n_threats[YELLOW]);
+    eval -= threat_value(thread_state.n_threats[BLUE],
+                         thread_state.n_threats[GREEN]);
+
     int n_queen_ry = 0;
     int n_queen_bg = 0;
     if (options_.enable_piece_square_table
@@ -955,6 +967,31 @@ int AlphaBetaPlayer::Evaluate(
               n_queen_ry++;
             } else {
               n_queen_bg++;
+            }
+          } else if (piece_type == PAWN) {
+            int advancement = 0;
+            switch (color) {
+            case RED:
+              advancement = 12 - row;
+              break;
+            case YELLOW:
+              advancement = row - 1;
+              break;
+            case BLUE:
+              advancement = col - 1;
+              break;
+            case GREEN:
+              advancement = 12 - col;
+              break;
+            default:
+              break;
+            }
+            int bonus = 2 * std::pow(advancement, 2);
+            bonus += std::max(150 * (advancement - 5), 0);
+            if (color == RED || color == YELLOW) {
+              eval += bonus;
+            } else {
+              eval -= bonus;
             }
           }
 
@@ -1007,8 +1044,7 @@ int AlphaBetaPlayer::Evaluate(
 
     // Asymmetric evaluation for playing style.
     // If engine_team is NO_TEAM, then the eval is symmetric.
-    constexpr int kAsymmetricQueenBonus = 25;
-    constexpr int kAsymmetricQueenBonus2 = 25;
+    constexpr int kAsymmetricQueenBonus = 0;
     constexpr int kStartEvaluation =
       16 * kPieceEvaluations[PAWN]
       + 4 * kPieceEvaluations[KNIGHT]
@@ -1019,8 +1055,10 @@ int AlphaBetaPlayer::Evaluate(
       ;
     constexpr float kAsymmetricPieceEvalFactor = 0.01;
     constexpr float kAsymmetricActivationEvalFactor = 0.00;
+    constexpr int kAsymmetricQueenBonus2 = 0.5 * kAsymmetricPieceEvalFactor * kPieceEvaluations[QUEEN];
 
     auto asym_eval = [](
+        int n_moves,
         int n_queen,
         int activation_eval,
         int player1_eval,
@@ -1032,24 +1070,40 @@ int AlphaBetaPlayer::Evaluate(
       }
       asym_eval += kAsymmetricActivationEvalFactor * activation_eval;
       asym_eval += kAsymmetricPieceEvalFactor * (player1_eval + player2_eval);
+      asym_eval += n_moves/2;
       // subtract constant to make the score even at the start position
       asym_eval -= kAsymmetricQueenBonus * 2 + kAsymmetricQueenBonus2;
       asym_eval -= kAsymmetricPieceEvalFactor * kStartEvaluation;
       return asym_eval;
     };
 
-    if (options_.engine_team == RED_YELLOW) {
-      eval += asym_eval(n_queen_ry, activation_ry,
+    int* total_moves = thread_state.TotalMoves();
+    if ((options_.engine_team == RED_YELLOW)
+        || (options_.engine_team == CURRENT_TEAM
+            && root_team_ == RED_YELLOW)) {
+      eval += asym_eval(total_moves[RED] + total_moves[YELLOW],
+          n_queen_ry, activation_ry,
           board.PieceEvaluation(RED), board.PieceEvaluation(YELLOW));
-    } else if (options_.engine_team == BLUE_GREEN) {
-      eval -= asym_eval(n_queen_bg, activation_bg,
+    } else if ((options_.engine_team == BLUE_GREEN)
+               || (options_.engine_team == CURRENT_TEAM
+                   && root_team_ == BLUE_GREEN)) {
+      eval -= asym_eval(total_moves[BLUE] + total_moves[GREEN],
+          n_queen_bg, activation_bg,
           board.PieceEvaluation(BLUE), board.PieceEvaluation(GREEN));
+    }
+
+    // double queen bonus
+    constexpr int kMultiQueenBonus = 200;
+    if (n_queen_ry >= 2) {
+      eval += kMultiQueenBonus;
+    }
+    if (n_queen_bg >= 2) {
+      eval -= kMultiQueenBonus;
     }
 
     // Mobility evaluation
     if (options_.enable_mobility_evaluation) {
-      int* total_moves = thread_state.TotalMoves();
-      eval += 5 * (total_moves[RED] + total_moves[YELLOW]
+      eval += 2 * (total_moves[RED] + total_moves[YELLOW]
                    - total_moves[BLUE] - total_moves[GREEN]);
     }
 
@@ -1087,7 +1141,7 @@ int AlphaBetaPlayer::Evaluate(
         PlayerColor pl_cl = static_cast<PlayerColor>(color);
         Player player(pl_cl);
         Team team = player.GetTeam();
-        Team other = OtherTeam(team);
+        //Team other = OtherTeam(team);
         const auto king_location = board.GetKingLocation(pl_cl);
         if (king_location.Present()) {
 
@@ -1125,21 +1179,35 @@ int AlphaBetaPlayer::Evaluate(
                 }
                 BoardLocation piece_location(row, col);
 
-                PlacedPiece attackers[5];
-                size_t num_attackers = board.GetAttackers2(attackers, 5, other, piece_location);
+                PlacedPiece attackers[15];
+                size_t num_pieces = board.GetAttackers2(attackers, 15, NO_TEAM, piece_location);
 
-                if (num_attackers > 0) {
+                if (num_pieces > 0) {
                   int value_of_attacks = 0;
-                  for (size_t attacker_id = 0; attacker_id < num_attackers; attacker_id++) {
+                  int num_attackers = 0;
+                  int value_of_protection = 0;
+                  int num_protectors = 0;
+                  for (size_t attacker_id = 0; attacker_id < num_pieces; attacker_id++) {
                     const auto& placed_piece = attackers[attacker_id];
                     const auto& piece = placed_piece.GetPiece();
+                    if (piece.GetPieceType() == KING) {
+                      continue;
+                    }
                     int val = king_attacker_values_[piece.GetPieceType()];
-                    value_of_attacks += val;
-                    if (val > 0) {
-                      attacker_colors[piece.GetColor()]++;
+                    if (piece.GetTeam() == team) {
+                      num_protectors++;
+                      value_of_protection += val;
+                    } else {
+                      num_attackers++;
+                      value_of_attacks += val;
+                      if (val > 0) {
+                        attacker_colors[piece.GetColor()]++;
+                      }
                     }
                   }
                   int attack_zone = value_of_attacks * king_attack_weight_[num_attackers] / 100;
+                  attack_zone -= value_of_protection * king_attack_weight_[num_protectors] / 200;
+                  attack_zone = std::max(attack_zone, 0);
                   safety -= attack_zone;
                 }
               }
@@ -1204,6 +1272,7 @@ AlphaBetaPlayer::MakeMove(
     Board& board,
     std::optional<std::chrono::milliseconds> time_limit,
     int max_depth) {
+  root_team_ = board.GetTurn().GetTeam();
   int64_t hash_key = board.HashKey();
   if (hash_key != last_board_key_) {
     average_root_eval_ = 0;
@@ -1431,12 +1500,20 @@ void AlphaBetaPlayer::UpdateMobilityEvaluation(
     PieceType last_piece_type = NO_PIECE;
     int n_pieces_activated = 0;
     int n_moves = 0;
+    int n_threats = 0;
     for (size_t move_id = 0; move_id < num_moves; move_id++) {
-      const auto& move = moves[move_id];
+      auto& move = moves[move_id];
       const auto& from = move.From();
       const auto& to = move.To();
       const auto& piece = board.GetPiece(from);
       PieceType piece_type = piece.GetPieceType();
+
+      if (move.IsCapture()) {
+        int see = move.ApproxSEE(board, kPieceEvaluations);
+        if (see >= 100) {
+          n_threats++;
+        }
+      }
 
       // don't count back rank squares in mobility / activation
       switch (piece.GetColor()) {
@@ -1481,6 +1558,7 @@ void AlphaBetaPlayer::UpdateMobilityEvaluation(
       n_pieces_activated++;
     }
     thread_state.NActivated()[color] = n_pieces_activated;
+    thread_state.n_threats[color] = n_threats;
   }
 
   board.SetPlayer(curr_player);
