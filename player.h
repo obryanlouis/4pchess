@@ -124,7 +124,7 @@ class ThreadState {
   // (from_row, from_col, to_row, to_col)
   Move* counter_moves = nullptr;
   // indexed by (in_check, is_capture)
-  ContinuationHistory continuation_history[2][2];
+  ContinuationHistory** continuation_history = nullptr;
 
   int n_threats[4] = {0, 0, 0, 0};
 

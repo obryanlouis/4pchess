@@ -195,11 +195,19 @@ ThreadState::ThreadState(
   : options_(options), board_(board), pv_info_(pv_info) {
   move_buffer_ = new Move[kBufferPartitionSize * kBufferNumPartitions];
   counter_moves = new Move[14*14*14*14];
+  continuation_history = new ContinuationHistory*[2];
+  for (int i = 0; i < 2; i++) {
+    continuation_history[i] = new ContinuationHistory[2];
+  }
 }
 
 ThreadState::~ThreadState() {
   delete[] move_buffer_;
   delete[] counter_moves;
+  for (int i = 0; i < 2; i++) {
+    delete[] continuation_history[i];
+  }
+  delete[] continuation_history;
 }
 
 Move* ThreadState::GetNextMoveBufferPartition() {
@@ -221,7 +229,7 @@ int AlphaBetaPlayer::GetNumLegalMoves(Board& board) {
   Player player = board.GetTurn();
   size_t num_moves = board.GetPseudoLegalMoves2(moves, kLimit);
   int n_legal = 0;
-  for (int i = 0; i < num_moves; i++) {
+  for (size_t i = 0; i < num_moves; i++) {
     const auto& move = moves[i];
     board.MakeMove(move);
     if (!board.IsKingInCheck(player)) { // invalid move
