@@ -26,6 +26,7 @@ MovePicker::MovePicker(
     size_t buffer_size
     ,Move* counter_moves
     ,bool include_quiets
+    ,const PieceToHistory** piece_to_history
     ) {
   enable_move_order_checks_ = enable_move_order_checks;
   stages_.resize(5);
@@ -38,6 +39,7 @@ MovePicker::MovePicker(
 
     const auto capture = move.GetCapturePiece();
     const auto piece = board.GetPiece(move.From());
+    const auto piece_type = piece.GetPieceType();
     const auto& from = move.From();
     const auto& to = move.To();
 
@@ -63,11 +65,16 @@ MovePicker::MovePicker(
         stages_[BAD_CAPTURE].emplace_back(i, score);
       }
     } else if (include_quiets) {
-      score += history_heuristic[piece.GetPieceType()][from.GetRow()][from.GetCol()][to.GetRow()][to.GetCol()];
+      score += history_heuristic[piece.GetPieceType()][from.GetRow()][from.GetCol()][to.GetRow()][to.GetCol()] / 2;
       if (move == counter_moves[from.GetRow()*14*14*14 + from.GetCol()*14*14
           + to.GetRow()*14 + to.GetCol()]) {
         score += 50;
       }
+      score += (*piece_to_history[0])[piece_type][to.GetRow()][to.GetCol()] / 2;
+      score += (*piece_to_history[1])[piece_type][to.GetRow()][to.GetCol()] / 4;
+      score += (*piece_to_history[2])[piece_type][to.GetRow()][to.GetCol()] / 4;
+      score += (*piece_to_history[3])[piece_type][to.GetRow()][to.GetCol()] / 4;
+      score += (*piece_to_history[4])[piece_type][to.GetRow()][to.GetCol()] / 4;
 
       stages_[QUIET].emplace_back(i, score);
     }

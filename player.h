@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "board.h"
+#include "move_picker.h"
 #include "transposition_table.h"
 
 namespace chess {
@@ -85,6 +86,10 @@ struct Stack {
   Move killers[2];
   bool tt_pv = false;
   int move_count = 0;
+  // indexed by (piece_type, row, col)
+  PieceToHistory* continuation_history = nullptr;
+  bool in_check = false;
+  Move current_move;
 };
 
 enum NodeType {
@@ -118,6 +123,8 @@ class ThreadState {
   // https://www.chessprogramming.org/Countermove_Heuristic
   // (from_row, from_col, to_row, to_col)
   Move* counter_moves = nullptr;
+  // indexed by (in_check, is_capture)
+  ContinuationHistory continuation_history[2][2];
 
   int n_threats[4] = {0, 0, 0, 0};
 
@@ -221,9 +228,10 @@ class AlphaBetaPlayer {
 
   void ResetMobilityScores(ThreadState& thread_state);
   void UpdateStats(Stack* ss, ThreadState& thread_state, const Board& board,
-                   const Move& move, int depth);
+                   const Move& move, int depth, bool fail_high);
   void UpdateQuietStats(Stack* ss, const Move& move);
   void UpdateMobilityEvaluation(ThreadState& thread_state, Player turn);
+  void UpdateContinuationHistories(Stack* ss, const Move& move, PieceType piece_type, int bonus);
   bool HasShield(Board& board, PlayerColor color, const BoardLocation& king_loc);
   bool OnBackRank(const BoardLocation& king_loc);
 
