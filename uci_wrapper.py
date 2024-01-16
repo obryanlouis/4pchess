@@ -16,12 +16,13 @@ START_FEN_OLD = "R-0,0,0,0-1,1,1,1-1,1,1,1-0,0,0,0-0-x,x,x,yR,yN,yB,yK,yQ,yB,yN,
 START_FEN_BY = "R-0,0,0,0-1,1,1,1-1,1,1,1-0,0,0,0-0-x,x,x,yR,yN,yB,yQ,yK,yB,yN,yR,x,x,x/x,x,x,yP,yP,yP,yP,yP,yP,yP,yP,x,x,x/x,x,x,8,x,x,x/bR,bP,10,gP,gR/bN,bP,10,gP,gN/bB,bP,10,gP,gB/bQ,bP,10,gP,gQ/bK,bP,10,gP,gK/bB,bP,10,gP,gB/bN,bP,10,gP,gN/bR,bP,10,gP,gR/x,x,x,8,x,x,x/x,x,x,rP,rP,rP,rP,rP,rP,rP,rP,x,x,x/x,x,x,rR,rN,rB,rQ,rK,rB,rN,rR,x,x,x"
 
 
-def get_move_response(process, response, pv_callback):
+def get_move_response(process, response, pv_callback, gameover_callback):
   while True:
     line = process.stdout.readline().strip()
     print(line)
     if 'Game completed' in line:
       response['gameover'] = True
+      gameover_callback()
     if ' pv ' in line:
       m = re.search(r'pv (.*?) score ([-\d]+)', line)
       pv = m.group(1).split()
@@ -89,7 +90,11 @@ class UciWrapper:
         self._process.stdin.write(
             f'setoption name engine_team value {team}\n')
 
-  def ponder(self, fen: str, move: str):
+  def ponder(self, fen: str, move: str, gameover_callback):
+    if (self._ponder_thread is not None
+        and self._ponder_thread.is_alive()):
+      return
+
     print('Pondering...')
     self.set_position(fen, [move])
     self._process.stdin.write('go\n')
@@ -103,7 +108,8 @@ class UciWrapper:
 
     self._ponder_thread = threading.Thread(
         target=get_move_response,
-        args=(self._process, self._ponder_result, pv_callback))
+        args=(self._process, self._ponder_result, pv_callback,
+              gameover_callback))
     self._ponder_thread.start()
 
   def set_position(self, fen: str, moves: list[str] | None = None):
@@ -131,6 +137,7 @@ class UciWrapper:
   def get_best_move(
       self,
       time_limit_ms: int,
+      gameover_callback: Callable[[], None],
       pv_callback: Callable[list[str], None] | None = None,
       last_move: str | None = None):
     self.maybe_recreate_process()
@@ -170,7 +177,7 @@ class UciWrapper:
     response = {}
     t = threading.Thread(
         target=get_move_response,
-        args=(self._process, response, pv_callback))
+        args=(self._process, response, pv_callback, gameover_callback))
     t.start()
     timeout_sec = (time_limit_ms + buffer_ms) / 1000.0 + 5
     t.join(timeout_sec)
