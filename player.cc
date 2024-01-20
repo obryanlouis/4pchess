@@ -1116,11 +1116,11 @@ int AlphaBetaPlayer::Evaluate(
       + 2 * kPieceEvaluations[QUEEN]
       + 2 * kPieceEvaluations[KING]
       ;
-    constexpr float kAsymmetricPieceEvalFactor = 0.01;
+    constexpr float kAsymmetricPieceEvalFactor = 0.01f;
     constexpr float kAsymmetricActivationEvalFactor = 0.00;
     constexpr int kAsymmetricQueenBonus2 = 0.5 * kAsymmetricPieceEvalFactor * kPieceEvaluations[QUEEN];
 
-    auto asym_eval = [](
+    auto asym_eval = [&](
         int n_moves,
         int n_queen,
         int activation_eval,
