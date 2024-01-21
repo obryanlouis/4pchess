@@ -90,6 +90,7 @@ struct Stack {
   PieceToHistory* continuation_history = nullptr;
   bool in_check = false;
   Move current_move;
+  int root_depth = 0;
 };
 
 enum NodeType {

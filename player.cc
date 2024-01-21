@@ -328,6 +328,10 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
 
   (ss+2)->killers[0] = (ss+2)->killers[1] = Move();
   ss->move_count = 0;
+  if (ply == 1) {
+    ss->root_depth = depth;
+  }
+  (ss+1)->root_depth = ss->root_depth;
 
   bool in_check = board.IsKingInCheck(player);
   ss->in_check = in_check;
@@ -428,6 +432,8 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
     }
 
     Move& move = *move_ptr;
+    const auto& from = move.From();
+    const auto& to = move.To();
     Piece piece = board.GetPiece(move.From());
     PieceType piece_type = piece.GetPieceType();
 
@@ -465,6 +471,16 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       r++;
       r += depth / 8;
     }
+    r -= in_check;
+    r -= delivers_check;
+    r -= is_pv_node;
+    r -= move.IsCapture() && move.ApproxSEE(board, kPieceEvaluations) > 0;
+    int history_score = thread_state.history_heuristic[piece.GetPieceType()][from.GetRow()][from.GetCol()]
+        [to.GetRow()][to.GetCol()];
+    r -= (history_score >> depth) > 10 && history_score > (1 << 10);
+
+    // allow limited extension if the reduction is negative
+    r = std::max(ply >= ss->root_depth * 1.5 ? 0 : -1, r);
 
     int new_depth = depth - 1;
     int lmr_depth = new_depth;
@@ -797,9 +813,13 @@ AlphaBetaPlayer::QSearch(
     if (!in_check) {
       if (capture) {
         if (move.GetStandardCapture().Present()) {
-          int see = StaticExchangeEvaluationCapture(kPieceEvaluations, board, move);
-          if (see < 0) {
-            continue;
+          // small optimization on SEE calculation
+          if (move.GetCapturePiece().GetPieceType() != QUEEN
+              && board.GetPiece(move.From()).GetPieceType() != PAWN) {
+            int see = StaticExchangeEvaluationCapture(kPieceEvaluations, board, move);
+            if (see < 0) {
+              continue;
+            }
           }
         }
       } else {

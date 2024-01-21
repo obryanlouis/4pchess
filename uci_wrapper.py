@@ -79,7 +79,10 @@ class UciWrapper:
   def maybe_stop_ponder_thread(self):
     if self._ponder_thread is not None:
       self._process.stdin.write('stop\n')
-      self._ponder_thread.join(10e-6)  # make sure it actually stops
+      try:
+        self._ponder_thread.join(10e-6)  # make sure it actually stops
+      except:
+        pass
       self._ponder_thread = None
 
   def set_team(self, team):
