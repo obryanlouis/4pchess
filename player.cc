@@ -80,15 +80,6 @@ AlphaBetaPlayer::AlphaBetaPlayer(std::optional<PlayerOptions> options) {
             int table_value = 0;
 
             if (is_piece) {
-              // back rank penalties
-              bool back_rank = (color == RED && row >= 12)
-                            || (color == YELLOW && row <= 1)
-                            || (color == BLUE && col <= 1)
-                            || (color == GREEN && col >= 12);
-              if (back_rank) {
-                table_value -= 25;
-              }
-
               // preference for centrality
               float center_dist = std::sqrt((row - 6.5) * (row - 6.5)
                                           + (col - 6.5) * (col - 6.5));
@@ -97,39 +88,12 @@ AlphaBetaPlayer::AlphaBetaPlayer(std::optional<PlayerOptions> options) {
               // preference for pieces on opponent team's back-3 rank
               if (color == RED || color == YELLOW) {
                 if (col < 3 || col >= 11) {
-                  table_value += 35;
+                  table_value += 10;
                 }
               } else {
                 if (row < 3 || row >= 11) {
-                  table_value += 35;
+                  table_value += 10;
                 }
-              }
-
-            } else if (piece_type == PAWN) {
-              // prefer moving rook pawns twice
-              switch (color) {
-              case RED:
-                if ((col == 3 || col == 10) && row == 10) {
-                  table_value += 15;
-                }
-                break;
-              case YELLOW:
-                if ((col == 3 || col == 10) && row == 3) {
-                  table_value += 15;
-                }
-                break;
-              case BLUE:
-                if ((row == 3 || row == 10) && col == 3) {
-                  table_value += 15;
-                }
-                break;
-              case GREEN:
-                if ((row == 3 || row == 10) && col == 10) {
-                  table_value += 15;
-                }
-                break;
-              default:
-                break;
               }
             }
 
@@ -471,6 +435,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       r++;
       r += depth / 8;
     }
+
     r -= in_check;
     r -= delivers_check;
     r -= is_pv_node;
@@ -1076,6 +1041,37 @@ int AlphaBetaPlayer::Evaluate(
             } else {
               eval -= bonus;
             }
+          } else if (piece_type == ROOK) {
+            int rook_bonus = 0;
+            constexpr int kRookBonus1 = 50;
+            constexpr int kRookBonus2 = 25;
+            if (col >= 4 && col <= 10 && row >= 4 && row <= 10) {
+              rook_bonus = kRookBonus1;
+            } else {
+              int delta_row = color == RED ? -1 : color == YELLOW ? 1 : 0;
+              int delta_col = color == BLUE ? 1 : color == GREEN ? -1: 0;
+              int blocked_by_pawn = false;
+              for (int i = 1; i < 7; i++) {
+                int r = row + i * delta_row;
+                int c = col + i * delta_col;
+                if (board.IsLegalLocation(r, c)) {
+                  const auto& other_piece = board.GetPiece(r, c);
+                  if (other_piece.GetPieceType() == PAWN) {
+                    blocked_by_pawn = true;
+                    break;
+                  }
+                }
+              }
+              if (!blocked_by_pawn) {
+                rook_bonus = kRookBonus2;
+              }
+            }
+
+            if (color == RED || color == YELLOW) {
+              eval += rook_bonus;
+            } else {
+              eval -= rook_bonus;
+            }
           }
 
           if (options_.enable_piece_square_table) {
@@ -1136,7 +1132,7 @@ int AlphaBetaPlayer::Evaluate(
       + 2 * kPieceEvaluations[QUEEN]
       + 2 * kPieceEvaluations[KING]
       ;
-    constexpr float kAsymmetricPieceEvalFactor = 0.01f;
+    constexpr float kAsymmetricPieceEvalFactor = 0.05f;
     constexpr float kAsymmetricActivationEvalFactor = 0.00;
     constexpr int kAsymmetricQueenBonus2 = 0.5 * kAsymmetricPieceEvalFactor * kPieceEvaluations[QUEEN];
 

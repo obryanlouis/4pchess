@@ -47,7 +47,7 @@ def get_move_response(process, response, pv_callback, gameover_callback):
 
 class UciWrapper:
 
-  def __init__(self, num_threads, max_depth):
+  def __init__(self, num_threads, max_depth, ponder):
     self._num_threads = num_threads
     self.create_process(num_threads)
     self._max_depth = max_depth
@@ -55,6 +55,7 @@ class UciWrapper:
     self._ponder_result = {}
     self._ponder_state = {'ponder_time': 0}
     self._team = None
+    self._ponder = False
 
   def create_process(self, num_threads):
     self._process = subprocess.Popen(
@@ -146,7 +147,8 @@ class UciWrapper:
     self.maybe_recreate_process()
     self.maybe_stop_ponder_thread()
 
-    if (last_move is not None
+    if (self._ponder
+        and last_move is not None
         and 1000 * self._ponder_state['ponder_time'] >= time_limit_ms
         and 'best_move' in self._ponder_result
         and last_move == self._ponder_result['best_move']
