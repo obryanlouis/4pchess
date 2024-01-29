@@ -1117,8 +1117,8 @@ int AlphaBetaPlayer::Evaluate(
     int activation_bg = 0;
     if (options_.enable_piece_activation) {
       auto team_activation_score = [](int n_player1, int n_player2) {
-        constexpr int A = 25;
-        constexpr int B = 15;
+        constexpr int A = 35;
+        constexpr int B = 25;
         return A * (n_player1 + n_player2) + B * n_player1 * n_player2;
       };
 
