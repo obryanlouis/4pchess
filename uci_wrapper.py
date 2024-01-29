@@ -149,7 +149,7 @@ class UciWrapper:
 
     if (self._ponder
         and last_move is not None
-        and 1000 * self._ponder_state['ponder_time'] >= time_limit_ms
+        and 1000 * self._ponder_state['ponder_time'] >= 1.5 * time_limit_ms
         and 'best_move' in self._ponder_result
         and last_move == self._ponder_result['best_move']
         and len(self._ponder_result['pv']) >= 2):

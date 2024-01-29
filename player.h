@@ -91,6 +91,7 @@ struct Stack {
   bool in_check = false;
   Move current_move;
   int root_depth = 0;
+  int static_eval = 0;
 };
 
 enum NodeType {

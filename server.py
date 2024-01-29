@@ -36,7 +36,7 @@ parser.add_argument(
     default=True)
 parser.add_argument(
     '-ponder', '--ponder', type=parse_bool, required=False,
-    default=False)
+    default=True)
 args = parser.parse_args()
 
 

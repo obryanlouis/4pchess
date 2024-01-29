@@ -296,6 +296,13 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
     ss->root_depth = depth;
   }
   (ss+1)->root_depth = ss->root_depth;
+  ss->static_eval = eval;
+  bool improving = ply > 2
+    && (ss-2)->current_move.Present()
+    && (ss-2)->static_eval + 150 < ss->static_eval;
+  bool declining = ply > 2
+    && (ss-2)->current_move.Present()
+    && ss->static_eval + 150 < (ss-2)->static_eval;
 
   bool in_check = board.IsKingInCheck(player);
   ss->in_check = in_check;
@@ -421,7 +428,6 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
     if (options_.enable_late_move_pruning
         && alpha > -kMateValue  // don't prune if we're mated
         && quiet
-        && !is_tt_pv
         && !is_pv_node
         && quiets >= 1+depth*depth/5
         ) {
@@ -435,6 +441,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       r++;
       r += depth / 8;
     }
+    r += declining - improving;
 
     r -= in_check;
     r -= delivers_check;
