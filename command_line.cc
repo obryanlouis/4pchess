@@ -267,7 +267,7 @@ void CommandLine::HandleCommand(
               "Hash MB must be non-negative, given: " + option_value);
           return;
         }
-        int size = *val * 1000000 / sizeof(HashTableEntry);
+        size_t size = *val * 1000000 / sizeof(HashTableEntry);
         if (size != player_options_.transposition_table_size) {
           player_options_.transposition_table_size = size;
           player_ = std::make_shared<AlphaBetaPlayer>(player_options_);

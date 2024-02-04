@@ -27,7 +27,7 @@ parser.add_argument('-arrows', '--arrows', type=parse_bool, required=False,
 # Enables asymmetric evaluation (anti-human eval)
 parser.add_argument(
     '-asymmetric_eval', '--asymmetric_eval', type=parse_bool, required=False,
-    default=False)
+    default=True)
 parser.add_argument(
     '-chat_eval', '--chat_eval', type=parse_bool, required=False,
     default=False)

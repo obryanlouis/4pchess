@@ -55,7 +55,7 @@ class UciWrapper:
     self._ponder_result = {}
     self._ponder_state = {'ponder_time': 0}
     self._team = None
-    self._ponder = False
+    self._ponder = ponder
 
   def create_process(self, num_threads):
     self._process = subprocess.Popen(

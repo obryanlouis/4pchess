@@ -429,7 +429,18 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
         && alpha > -kMateValue  // don't prune if we're mated
         && quiet
         && !is_pv_node
-        && quiets >= 1+depth*depth/5
+        && quiets >= 1+depth*depth/(declining?10:5)
+        ) {
+      num_lm_pruned_++;
+      continue;
+    }
+
+    // for the pv
+    if (options_.enable_late_move_pruning
+        && alpha > -kMateValue  // don't prune if we're mated
+        && quiet
+        && !improving
+        && quiets >= 5+depth*depth/(declining?2:1)
         ) {
       num_lm_pruned_++;
       continue;
@@ -452,7 +463,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
     r -= (history_score >> depth) > 10 && history_score > (1 << 10);
 
     // allow limited extension if the reduction is negative
-    r = std::max(ply >= ss->root_depth * 1.5 ? 0 : -1, r);
+    r = std::max(ply >= ss->root_depth * 1.0 ? 0 : -1, r);
 
     int new_depth = depth - 1;
     int lmr_depth = new_depth;
@@ -717,6 +728,7 @@ AlphaBetaPlayer::QSearch(
 
   // initialize score
   int best_value = -kMateValue;
+  int futility_base = -kMateValue;
   if (in_check) {
     best_value = -kMateValue;
   } else {
@@ -738,6 +750,7 @@ AlphaBetaPlayer::QSearch(
     if (best_value + kPieceEvaluations[QUEEN] < alpha) {
       return std::make_tuple(alpha, std::nullopt);
     }
+    futility_base = best_value;
   }
 
   std::optional<Move> best_move;
@@ -774,6 +787,8 @@ AlphaBetaPlayer::QSearch(
 
   int move_count = 0;
   int quiet_check_evasions = 0;
+  bool fail_low = true;
+  bool fail_high = false;
 
   while (true) {
     Move* move_ptr = move_picker.GetNextMove();
@@ -839,6 +854,12 @@ AlphaBetaPlayer::QSearch(
         board.UndoMove();
         continue;
       }
+      if (move.IsCapture()
+          && !delivers_check
+          && futility_base + kPieceEvaluations[move.GetCapturePiece().GetPieceType()] < alpha) {
+        board.UndoMove();
+        continue;
+      }
     }
 
     quiet_check_evasions += !capture && in_check;
@@ -874,6 +895,7 @@ AlphaBetaPlayer::QSearch(
     if (score > best_value) {
       best_value = score;
       if (score > alpha) {
+        fail_low = false;
         best_move = move;
         // update pv
         if (is_pv_node) {
@@ -883,10 +905,15 @@ AlphaBetaPlayer::QSearch(
         if (score < beta) {
           alpha = score;
         } else {
+          fail_high = true;
           break;  // fail high
         }
       }
     }
+  }
+
+  if (!fail_low) {
+    UpdateStats(ss, thread_state, board, *best_move, /*depth=*/0, fail_high);
   }
 
   int score = best_value;
@@ -1118,7 +1145,7 @@ int AlphaBetaPlayer::Evaluate(
     if (options_.enable_piece_activation) {
       auto team_activation_score = [](int n_player1, int n_player2) {
         constexpr int A = 35;
-        constexpr int B = 25;
+        constexpr int B = 20;
         return A * (n_player1 + n_player2) + B * n_player1 * n_player2;
       };
 
