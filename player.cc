@@ -395,6 +395,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
   int quiets = 0;
   bool fail_low = true;
   bool fail_high = false;
+  std::vector<Move> searched_moves;
 
   while (true) {
     Move* move_ptr = move_picker.GetNextMove();
@@ -446,7 +447,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       continue;
     }
 
-    int r = 1 + std::max(0,(depth-5)/5) + move_count/30;
+    int r = 1 + std::max(0,(depth-5)/3) + move_count/30;
 
     if (quiet) {
       r++;
@@ -458,9 +459,17 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
     r -= delivers_check;
     r -= is_pv_node;
     r -= move.IsCapture() && move.ApproxSEE(board, kPieceEvaluations) > 0;
-    int history_score = thread_state.history_heuristic[piece.GetPieceType()][from.GetRow()][from.GetCol()]
+    if (!move.IsCapture()) {
+      int history_score = thread_state.history_heuristic[piece.GetPieceType()][from.GetRow()][from.GetCol()]
+          [to.GetRow()][to.GetCol()];
+      r -= std::clamp((history_score - 4000) / 10000, -3, 3);
+    } else {
+      Piece captured = move.GetCapturePiece();
+      int history_score = thread_state.capture_heuristic[piece.GetPieceType()][piece.GetColor()]
+        [captured.GetPieceType()][captured.GetColor()]
         [to.GetRow()][to.GetCol()];
-    r -= (history_score >> depth) > 10 && history_score > (1 << 10);
+      r -= std::clamp((history_score - 4000) / 10000, -3, 3);
+    }
 
     // allow limited extension if the reduction is negative
     r = std::max(ply >= ss->root_depth * 1.0 ? 0 : -1, r);
@@ -605,6 +614,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       return std::nullopt; // timeout
     }
     int score = -std::get<0>(*value_and_move_or);
+    searched_moves.push_back(move);
 
     if (score >= beta) {
       alpha = beta;
@@ -632,7 +642,8 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
   }
 
   if (!fail_low) {
-    UpdateStats(ss, thread_state, board, *best_move, depth, fail_high);
+    UpdateStats(ss, thread_state, board, *best_move, depth, fail_high,
+                searched_moves);
   }
 
   int score = alpha;
@@ -789,6 +800,7 @@ AlphaBetaPlayer::QSearch(
   int quiet_check_evasions = 0;
   bool fail_low = true;
   bool fail_high = false;
+  std::vector<Move> searched_moves;
 
   while (true) {
     Move* move_ptr = move_picker.GetNextMove();
@@ -886,6 +898,7 @@ AlphaBetaPlayer::QSearch(
       return std::nullopt; // timeout
     }
     int score = -std::get<0>(*value_and_move_or);
+    searched_moves.push_back(move);
 
     if (!best_move.has_value()) {
       best_move = move;
@@ -913,7 +926,8 @@ AlphaBetaPlayer::QSearch(
   }
 
   if (!fail_low) {
-    UpdateStats(ss, thread_state, board, *best_move, /*depth=*/0, fail_high);
+    UpdateStats(ss, thread_state, board, *best_move, /*depth=*/0, fail_high,
+                searched_moves);
   }
 
   int score = best_value;
@@ -935,7 +949,8 @@ AlphaBetaPlayer::QSearch(
 
 void AlphaBetaPlayer::UpdateStats(
     Stack* ss, ThreadState& thread_state, const Board& board,
-    const Move& move, int depth, bool fail_high) {
+    const Move& move, int depth, bool fail_high,
+    const std::vector<Move>& searched_moves) {
   auto from = move.From();
   auto to = move.To();
   Piece piece = board.GetPiece(move.From());
@@ -949,7 +964,6 @@ void AlphaBetaPlayer::UpdateStats(
       [to.GetRow()][to.GetCol()] += bonus;
   } else {
     if (options_.enable_history_heuristic) {
-      Piece piece = board.GetPiece(move.From());
       thread_state.history_heuristic[piece.GetPieceType()][from.GetRow()][from.GetCol()]
         [to.GetRow()][to.GetCol()] += bonus;
     }
@@ -959,6 +973,22 @@ void AlphaBetaPlayer::UpdateStats(
     }
     UpdateQuietStats(ss, move);
     UpdateContinuationHistories(ss, move, piece.GetPieceType(), bonus);
+  }
+  for (const auto& other_move : searched_moves) {
+    if (other_move != move) {
+      auto other_from = other_move.From();
+      auto other_to = other_move.To();
+      Piece other_piece = board.GetPiece(other_from);
+      if (other_move.IsCapture()) {
+        Piece other_captured = other_move.GetCapturePiece();
+        thread_state.capture_heuristic[other_piece.GetPieceType()][other_piece.GetColor()]
+          [other_captured.GetPieceType()][other_captured.GetColor()]
+          [other_to.GetRow()][other_to.GetCol()] -= bonus;
+      } else {
+        thread_state.history_heuristic[other_piece.GetPieceType()][other_from.GetRow()][other_from.GetCol()]
+          [other_to.GetRow()][other_to.GetCol()] -= bonus;
+      }
+    }
   }
 }
 

@@ -230,7 +230,8 @@ class AlphaBetaPlayer {
 
   void ResetMobilityScores(ThreadState& thread_state);
   void UpdateStats(Stack* ss, ThreadState& thread_state, const Board& board,
-                   const Move& move, int depth, bool fail_high);
+                   const Move& move, int depth, bool fail_high,
+                   const std::vector<Move>& searched_moves);
   void UpdateQuietStats(Stack* ss, const Move& move);
   void UpdateMobilityEvaluation(ThreadState& thread_state, Player turn);
   void UpdateContinuationHistories(Stack* ss, const Move& move, PieceType piece_type, int bonus);
