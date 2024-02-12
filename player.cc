@@ -426,22 +426,19 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
     bool quiet = !in_check && !move.IsCapture() && !delivers_check
       ;
 
-    if (options_.enable_late_move_pruning
-        && alpha > -kMateValue  // don't prune if we're mated
-        && quiet
-        && !is_pv_node
-        && quiets >= 1+depth*depth/(declining?10:5)
-        ) {
-      num_lm_pruned_++;
-      continue;
+    // late move pruning threshold
+    int q = 1 + depth*depth/(declining?10:5);
+    if (is_pv_node) {
+      q = 5 + depth*depth/(declining?2:1);
+      if (improving) {
+        q *= 2;
+      }
     }
 
-    // for the pv
     if (options_.enable_late_move_pruning
         && alpha > -kMateValue  // don't prune if we're mated
         && quiet
-        && !improving
-        && quiets >= 5+depth*depth/(declining?2:1)
+        && quiets >= q
         ) {
       num_lm_pruned_++;
       continue;
