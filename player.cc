@@ -326,7 +326,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
       && !is_pv_node // not a pv node
       && null_moves == 0 // last move wasn't null
       && !in_check // not in check
-      && eval >= beta
+      && eval >= beta + 50
       && !partner_checked
       ) {
     num_null_moves_tried_++;
